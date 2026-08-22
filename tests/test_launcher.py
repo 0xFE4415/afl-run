@@ -36,6 +36,25 @@ class _PendingProcess:
     def terminate(self) -> None:
         return None
 
+    def kill(self) -> None:
+        return None
+
+
+class _StubbornProcess:
+    pid = 3
+    returncode: int | None = None
+
+    def terminate(self) -> None:
+        return None
+
+    def kill(self) -> None:
+        self.returncode = -9
+
+    async def wait(self) -> int:
+        while self.returncode is None:
+            await asyncio.sleep(0)
+        return self.returncode
+
 
 def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path, caplog) -> None:
     process = _process(pid=42)
@@ -111,6 +130,26 @@ def test_fuzzer_group_terminates_processes_on_exit() -> None:
     dead_process.terminate.assert_not_called()
     live_log.close.assert_called_once_with()
     dead_log.close.assert_called_once_with()
+
+
+def test_fuzzer_group_kills_processes_that_ignore_terminate() -> None:
+    process = _StubbornProcess()
+    exited_process = _process()
+    exited_process.terminate.side_effect = lambda: setattr(exited_process, "returncode", 0)
+    log = MagicMock()
+    exited_log = MagicMock()
+    fuzzer = FuzzerProcess("stubborn", process, Path("stubborn.log"), log)
+    exited = FuzzerProcess("exited", exited_process, Path("exited.log"), exited_log)
+
+    async def run() -> None:
+        with patch("afl_run.launcher.SHUTDOWN_TIMEOUT_SECONDS", 0.01):
+            await FuzzerGroup((fuzzer, exited)).__aexit__(None, None, None)
+
+    asyncio.run(run())
+
+    assert process.returncode == -9
+    log.close.assert_called_once_with()
+    exited_log.close.assert_called_once_with()
 
 
 def test_fuzzer_group_reports_dead_process() -> None:
