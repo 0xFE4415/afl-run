@@ -42,7 +42,6 @@ class EngineConfig(BaseModel):
 class EnvConfig(BaseModel):
     variables: dict[str, str] = Field(
         default_factory=lambda: {
-            "SLEIGHHOME": "/home/user/ghidra",
             "AFL_MAP_SIZE": "262144",
             "AFL_NO_AUTODICT": "1",
             "AFL_FORKSRV_INIT_TMOUT": "60000",
