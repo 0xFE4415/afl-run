@@ -10,6 +10,7 @@ import pytest
 from afl_run.launcher import (
     FuzzerGroup,
     FuzzerProcess,
+    _abort_if_any_died,
     launch_fuzzer,
 )
 
@@ -56,6 +57,20 @@ class _StubbornProcess:
         return self.returncode
 
 
+class _ErrorProcess:
+    pid = 4
+    returncode = 1
+
+    def terminate(self) -> None:
+        return None
+
+    def kill(self) -> None:
+        return None
+
+    async def wait(self) -> int:
+        raise OSError("wait failed")
+
+
 def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path, caplog) -> None:
     process = _process(pid=42)
     caplog.set_level(logging.INFO, logger="afl_run.launcher")
@@ -96,6 +111,25 @@ def test_launch_fuzzer_closes_log_when_start_fails(tmp_path: Path) -> None:
         log_file.close.assert_called_once_with()
 
     asyncio.run(run())
+
+
+def test_launch_fuzzer_appends_existing_log_on_resume(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"previous output\n")
+    process = _process(pid=42)
+
+    async def run() -> FuzzerProcess:
+        with patch(
+            "afl_run.launcher.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=process),
+        ):
+            return await launch_fuzzer(("afl-fuzz",), "main", tmp_path, {}, append=True)
+
+    result = asyncio.run(run())
+    result.log_file.write(b"new output\n")
+    result.log_file.close()
+
+    assert log_path.read_bytes() == b"previous output\nnew output\n"
 
 
 def test_fuzzer_group_tracks_launched_fuzzer() -> None:
@@ -165,6 +199,21 @@ def test_fuzzer_group_reports_dead_process() -> None:
     asyncio.run(run())
     process.wait.assert_awaited()
     log.close.assert_called_once_with()
+
+
+def test_abort_if_any_died_reports_wait_errors() -> None:
+    process = _ErrorProcess()
+    fuzzer = FuzzerProcess("broken", process, Path("broken.log"), MagicMock())
+
+    async def run() -> None:
+        with pytest.raises(RuntimeError, match="wait failed"):
+            await _abort_if_any_died((fuzzer,))
+
+    asyncio.run(run())
+
+
+def test_abort_if_any_died_accepts_empty_group() -> None:
+    asyncio.run(_abort_if_any_died(()))
 
 
 def test_fuzzer_group_cancels_other_waiters() -> None:

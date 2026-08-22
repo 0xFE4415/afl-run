@@ -98,6 +98,26 @@ def test_nonexistent_seeds(tmp_path: Path) -> None:
         resolve_paths(cfg)
 
 
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [("laf", "LAF harness"), ("asan_main", "ASAN harness")],
+)
+def test_nonexistent_optional_harness(field: str, message: str, tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    setattr(cfg.paths, field, str(tmp_path / "missing-harness"))
+
+    with pytest.raises(ValueError, match=message):
+        resolve_paths(cfg)
+
+
+def test_nonexistent_afl_tmpdir(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.engine.afl_tmpdir = str(tmp_path / "missing-tmp")
+
+    with pytest.raises(ValueError, match="afl_tmpdir"):
+        resolve_paths(cfg)
+
+
 def test_cli_main(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
     config_path = tmp_path / "config.json"

@@ -20,6 +20,7 @@ class ResolvedPaths:
     seeds_dir: Path
     out_dir: Path
     log_dir: Path
+    afl_tmpdir: Path | None = None
 
 
 def resolve_paths(cfg: Config) -> ResolvedPaths:
@@ -32,6 +33,7 @@ def resolve_paths(cfg: Config) -> ResolvedPaths:
     laf = Path(p.laf) if p.laf else None
     asan_main = Path(p.asan_main) if p.asan_main else None
     log_dir = Path(cfg.execution.log_dir)
+    afl_tmpdir = Path(cfg.engine.afl_tmpdir) if cfg.engine.afl_tmpdir else None
 
     resolved = ResolvedPaths(
         main=main,
@@ -42,6 +44,7 @@ def resolve_paths(cfg: Config) -> ResolvedPaths:
         seeds_dir=seeds_dir,
         out_dir=out_dir,
         log_dir=log_dir,
+        afl_tmpdir=afl_tmpdir,
     )
     _validate(resolved)
     return resolved
@@ -60,5 +63,11 @@ def _require_dir(path: Path, what: str) -> None:
 def _validate(r: ResolvedPaths) -> None:
     _require_file(r.main, "MAIN harness")
     _require_file(r.cmplog, "CMPLOG harness")
+    if r.laf is not None:
+        _require_file(r.laf, "LAF harness")
+    if r.asan_main is not None:
+        _require_file(r.asan_main, "ASAN harness")
     _require_file(r.dictionary, "dictionary")
     _require_dir(r.seeds_dir, "seeds dir")
+    if r.afl_tmpdir is not None:
+        _require_dir(r.afl_tmpdir, "afl_tmpdir")

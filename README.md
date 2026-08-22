@@ -7,7 +7,7 @@ pydantic and supplied as JSON through a Click CLI.
 
 - Python >= 3.13
 - [uv](https://github.com/astral-sh/uv)
-- Linux with AFL++ and built harnesses
+- Linux kernel >= 5.3 with AFL++ and built harnesses
 
 ## Setup
 
@@ -80,7 +80,8 @@ Example:
     "skip_deterministic": true,
     "asan_instances": 2,
     "asan_timeout_scale": 2,
-    "afl_tmpdir": null
+    "afl_tmpdir": null,
+    "additional_flags": []
   },
   "env": {
     "variables": {
@@ -98,3 +99,29 @@ Example:
 `memory_limit_cmplog_mb` is independent from `memory_limit_mb` and defaults to
 unlimited (`null`). This is recommended because CmpLog can map substantially
 more memory; set it explicitly if the campaign requires a limit.
+
+### Host Configuration
+
+Before launching AFL++, the runner may set `kernel.randomize_va_space` and
+`kernel.core_pattern` using `sudo`. If either value needs changing,
+passwordless sudo is required; the runner uses `sudo -n` and aborts before
+writing anything when it is unavailable. If both values are already correct,
+sudo is not invoked.
+
+These settings affect the whole system and are not restored when the campaign
+ends. Consider using AFL++'s supported `afl-system-config` tool to manage the
+host configuration instead.
+
+When `execution.fresh` is false, existing per-fuzzer logs are appended to so
+that resumed campaigns retain earlier output. Fresh campaigns truncate logs.
+On resume, an existing master `fuzzer_stats` file is treated as readiness for
+the master, so a stale file can hide a master startup failure until the normal
+fuzzer health check runs.
+
+### AFL++ Tuning
+
+Campaign-wide AFL++ tuning flags can be supplied as strings in
+`engine.additional_flags`. They are appended to every master, CmpLog, and
+worker command, for example `"additional_flags": ["-Z"]`. Environment-based
+options such as `AFL_FINAL_SYNC=1` and `AFL_TESTCACHE_SIZE` can be supplied
+through `env.variables`. Worker-specific tuning remains a future extension.
