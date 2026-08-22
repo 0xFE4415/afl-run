@@ -3,6 +3,9 @@
 Python launcher for AFL++ fuzzing campaigns. Configuration is modelled with
 pydantic and supplied as JSON through a Click CLI.
 
+> This project is tailored to personal needs. Pull requests and new issues
+> are welcome, though.
+
 ## Requirements
 
 - Python >= 3.13
