@@ -20,6 +20,8 @@ uv pip install -e ".[all]"
 
 All linters, type checks and tests are orchestrated with nox:
 
+Markdownlint is required for all Markdown files and runs as part of CI.
+
 ```sh
 nox -s check      # ruff + ty (strict) + pytest + 100% branch coverage
 nox -s ruff       # ruff only
