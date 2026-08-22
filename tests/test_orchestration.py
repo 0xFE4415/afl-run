@@ -9,6 +9,7 @@ from afl_run.config import Config, PathConfig
 from afl_run.orchestration import (
     build_cmplog_command,
     build_master_command,
+    build_worker_commands,
     prepare_shared_memory,
     wait_for_master,
 )
@@ -88,6 +89,30 @@ def test_build_cmplog_command() -> None:
         "--",
         "cmplog",
     )
+
+
+def test_build_worker_commands() -> None:
+    config = _config()
+    config.execution.n_instances = 3
+    config.engine.asan_instances = 2
+    paths = _paths()
+    paths.laf = Path("laf")
+    paths.asan_main = Path("asan")
+
+    commands = build_worker_commands(config, paths)
+
+    assert [command[-4:] for command in commands] == [
+        ("-S", "s1", "--", "main"),
+        ("-S", "s2", "--", "main"),
+        ("-S", "laf", "--", "laf"),
+        ("-S", "asan1", "--", "asan"),
+        ("-S", "asan2", "--", "asan"),
+    ]
+
+
+def test_build_worker_commands_without_optional_workers() -> None:
+    commands = build_worker_commands(_config(), _paths())
+    assert commands == ()
 
 
 def test_prepare_shared_memory_replaces_existing(tmp_path: Path) -> None:
