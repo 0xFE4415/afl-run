@@ -17,7 +17,7 @@
     "timeout_ms": 2500,
     "timeout_asan_ms": null,
     "memory_limit_mb": 1024,
-    "globals": 4096,
+    "max_input_length": 4096,
     "skip_deterministic": true,
     "asan_instances": 2,
     "asan_timeout_scale": 2,
