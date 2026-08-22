@@ -63,6 +63,16 @@ def test_cmplog_args_default_to_unlimited() -> None:
     assert "-m" not in build_cmplog_args(EngineConfig(memory_limit_mb=1024), relative_paths())
 
 
+def test_additional_flags_are_appended_to_engine_args() -> None:
+    config = EngineConfig(additional_flags=("-Z", "-p", "explore"))
+
+    assert build_common_no_cmplog_args(config, relative_paths())[-3:] == (
+        "-Z",
+        "-p",
+        "explore",
+    )
+
+
 def test_asan_args_use_scaled_timeout() -> None:
     config = EngineConfig(asan_timeout_scale=3, memory_limit_asan_mb=0)
     assert build_asan_args(config, relative_paths()) == (

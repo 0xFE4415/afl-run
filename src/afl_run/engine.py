@@ -69,4 +69,5 @@ def _build_args(
     args += ("-x", str(paths.dictionary))
     if config.skip_deterministic:
         args += ("-z",)
+    args += config.additional_flags
     return args

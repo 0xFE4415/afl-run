@@ -23,7 +23,8 @@
     "skip_deterministic": true,
     "asan_instances": 2,
     "asan_timeout_scale": 2,
-    "afl_tmpdir": null
+    "afl_tmpdir": null,
+    "additional_flags": []
   },
   "env": {
     "variables": {

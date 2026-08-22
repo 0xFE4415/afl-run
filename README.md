@@ -80,7 +80,8 @@ Example:
     "skip_deterministic": true,
     "asan_instances": 2,
     "asan_timeout_scale": 2,
-    "afl_tmpdir": null
+    "afl_tmpdir": null,
+    "additional_flags": []
   },
   "env": {
     "variables": {
@@ -119,8 +120,8 @@ fuzzer health check runs.
 
 ### AFL++ Tuning
 
-The runner deliberately does not impose campaign-specific tuning such as
-`-l 2AT`, `-Z`, `-L 0`, varied power schedules, or worker-specific settings.
-Environment-based options such as `AFL_FINAL_SYNC=1` and
-`AFL_TESTCACHE_SIZE` can be supplied through `env.variables`; command-line
-tuning remains a future extension.
+Campaign-wide AFL++ tuning flags can be supplied as strings in
+`engine.additional_flags`. They are appended to every master, CmpLog, and
+worker command, for example `"additional_flags": ["-Z"]`. Environment-based
+options such as `AFL_FINAL_SYNC=1` and `AFL_TESTCACHE_SIZE` can be supplied
+through `env.variables`. Worker-specific tuning remains a future extension.

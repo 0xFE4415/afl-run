@@ -30,6 +30,7 @@ class EngineConfig(BaseModel):
     asan_instances: int = Field(default=2, ge=0)
     asan_timeout_scale: int = Field(default=2, ge=0)
     afl_tmpdir: str | None = None
+    additional_flags: tuple[str, ...] = ()
 
 
 class EnvConfig(BaseModel):
