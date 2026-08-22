@@ -7,11 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from afl_run.launcher import (
+    FuzzerGroup,
     FuzzerProcess,
-    abort_if_any_died,
     launch_fuzzer,
-    terminate_fuzzers,
-    wait_for_fuzzers,
 )
 
 
@@ -78,7 +76,20 @@ def test_launch_fuzzer_closes_log_when_start_fails(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
-def test_terminate_fuzzers_terminates_live_processes() -> None:
+def test_fuzzer_group_tracks_launched_fuzzer() -> None:
+    fuzzer = FuzzerProcess("main", _process(), Path("main.log"), MagicMock())
+
+    async def run() -> None:
+        with patch("afl_run.launcher.launch_fuzzer", new=AsyncMock(return_value=fuzzer)):
+            async with FuzzerGroup() as group:
+                result = await group.launch(("afl-fuzz",), "main", Path("logs"), {})
+                assert result is fuzzer
+                assert group.fuzzers == (fuzzer,)
+
+    asyncio.run(run())
+
+
+def test_fuzzer_group_terminates_processes_on_exit() -> None:
     live_process = _process()
     dead_process = _process(returncode=1)
     live_log = MagicMock()
@@ -86,7 +97,11 @@ def test_terminate_fuzzers_terminates_live_processes() -> None:
     live = FuzzerProcess("live", live_process, Path("live.log"), live_log)
     dead = FuzzerProcess("dead", dead_process, Path("dead.log"), dead_log)
 
-    asyncio.run(terminate_fuzzers((live, dead)))
+    async def run() -> None:
+        async with FuzzerGroup((live, dead)):
+            pass
+
+    asyncio.run(run())
 
     live_process.terminate.assert_called_once_with()
     live_process.wait.assert_awaited_once()
@@ -95,35 +110,31 @@ def test_terminate_fuzzers_terminates_live_processes() -> None:
     dead_log.close.assert_called_once_with()
 
 
-def test_wait_for_fuzzers_waits_and_closes_logs() -> None:
-    process = _process()
-    log = MagicMock()
-    fuzzer = FuzzerProcess("main", process, Path("main.log"), log)
-
-    asyncio.run(wait_for_fuzzers((fuzzer,)))
-
-    process.wait.assert_awaited_once()
-    log.close.assert_called_once_with()
-
-
-def test_abort_if_any_died_reports_dead_process() -> None:
+def test_fuzzer_group_reports_dead_process() -> None:
     log = MagicMock()
     process = _process(returncode=1)
     fuzzer = FuzzerProcess("main", process, Path("main.log"), log)
 
-    with pytest.raises(RuntimeError, match="main"):
-        asyncio.run(abort_if_any_died((fuzzer,)))
+    async def run() -> None:
+        async with FuzzerGroup((fuzzer,)) as group:
+            with pytest.raises(RuntimeError, match="main"):
+                await group.abort_if_any_died()
 
-    process.wait.assert_awaited_once()
-    log.close.assert_not_called()
+    asyncio.run(run())
+    process.wait.assert_awaited()
+    log.close.assert_called_once_with()
 
 
-def test_abort_if_any_died_cancels_other_waiters() -> None:
+def test_fuzzer_group_cancels_other_waiters() -> None:
     pending_process = _PendingProcess()
     first = FuzzerProcess("first", _process(returncode=1), Path("first.log"), MagicMock())
     pending = FuzzerProcess("pending", pending_process, Path("pending.log"), MagicMock())
 
-    with pytest.raises(RuntimeError):
-        asyncio.run(abort_if_any_died((first, pending)))
+    async def run() -> None:
+        async with FuzzerGroup((first, pending)) as group:
+            with pytest.raises(RuntimeError):
+                await group.abort_if_any_died()
 
-    assert pending_process.calls == 1
+    asyncio.run(run())
+
+    assert pending_process.calls == 2
