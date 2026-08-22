@@ -5,13 +5,13 @@
     "log_dir": "logs"
   },
   "paths": {
-    "main": null,
-    "cmplog": null,
-    "laf": null,
-    "asan_main": null,
-    "dictionary": null,
-    "seeds_dir": null,
-    "out_dir": null
+    "main": "build-afl/afl_harness",
+    "cmplog": "build-afl-cmp/afl_harness",
+    "laf": "build-afl-laf/afl_harness",
+    "asan_main": "build-asan/afl_harness",
+    "dictionary": "x86.dict",
+    "seeds_dir": "seeds",
+    "out_dir": "out"
   },
   "engine": {
     "timeout_ms": 2500,
@@ -25,7 +25,7 @@
   },
   "env": {
     "variables": {
-      "SLEIGHHOME": "/home/user/ghidra",
+      "SLEIGHHOME": "ghidra",
       "AFL_MAP_SIZE": "262144",
       "AFL_NO_AUTODICT": "1",
       "AFL_FORKSRV_INIT_TMOUT": "60000",
