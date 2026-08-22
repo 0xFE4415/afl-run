@@ -201,6 +201,19 @@ def test_fuzzer_group_reports_dead_process() -> None:
     log.close.assert_called_once_with()
 
 
+def test_abort_if_any_died_reports_all_dead_processes() -> None:
+    first = FuzzerProcess("first", _process(returncode=1), Path("first.log"), MagicMock())
+    second = FuzzerProcess("second", _process(returncode=2), Path("second.log"), MagicMock())
+
+    async def run() -> None:
+        with pytest.raises(RuntimeError) as error:
+            await _abort_if_any_died((first, second))
+        assert "first" in str(error.value)
+        assert "second" in str(error.value)
+
+    asyncio.run(run())
+
+
 def test_abort_if_any_died_reports_wait_errors() -> None:
     process = _ErrorProcess()
     fuzzer = FuzzerProcess("broken", process, Path("broken.log"), MagicMock())

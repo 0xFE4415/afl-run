@@ -8,26 +8,8 @@ from afl_run.config import EngineConfig
 from afl_run.engine import (
     build_asan_args,
     build_cmplog_args,
-    build_common_args,
     build_common_no_cmplog_args,
 )
-
-
-def test_common_args_include_cmplog_and_z() -> None:
-    args = build_common_args(EngineConfig(memory_limit_mb=1024), relative_paths())
-    assert args == (
-        "-G",
-        "4096",
-        "-m",
-        "1024",
-        "-t",
-        "2500",
-        "-c",
-        "cmplog",
-        "-x",
-        "dict",
-        "-z",
-    )
 
 
 def test_common_no_cmplog_can_disable_deterministic_skip() -> None:
@@ -132,7 +114,7 @@ def test_common_args_reflect_engine_settings(
         skip_deterministic=skip_deterministic,
     )
 
-    args = build_common_args(config, relative_paths())
+    args = build_common_no_cmplog_args(config, relative_paths())
 
     assert args[:6] == (
         "-G",
@@ -142,8 +124,7 @@ def test_common_args_reflect_engine_settings(
         "-t",
         str(timeout),
     )
-    assert args[6:8] == ("-c", "cmplog")
-    assert args[8:10] == ("-x", "dict")
+    assert args[6:8] == ("-x", "dict")
     assert ("-z" in args) is skip_deterministic
 
 

@@ -13,7 +13,7 @@ class PathValidationError(ValueError):
 @dataclass
 class ResolvedPaths:
     main: Path
-    cmplog: Path
+    cmplog: Path | None
     laf: Path | None
     asan_main: Path | None
     dictionary: Path | None
@@ -24,14 +24,14 @@ class ResolvedPaths:
 
 
 def resolve_paths(cfg: Config) -> ResolvedPaths:
-    p = cfg.paths
-    main = Path(p.main)
-    cmplog = Path(p.cmplog) if p.cmplog else main
-    dictionary = Path(p.dictionary) if p.dictionary else None
-    seeds_dir = Path(p.seeds_dir)
-    out_dir = Path(p.out_dir)
-    laf = Path(p.laf) if p.laf else None
-    asan_main = Path(p.asan_main) if p.asan_main else None
+    path_config = cfg.paths
+    main = Path(path_config.main)
+    cmplog = Path(path_config.cmplog) if path_config.cmplog else None
+    dictionary = Path(path_config.dictionary) if path_config.dictionary else None
+    seeds_dir = Path(path_config.seeds_dir)
+    out_dir = Path(path_config.out_dir)
+    laf = Path(path_config.laf) if path_config.laf else None
+    asan_main = Path(path_config.asan_main) if path_config.asan_main else None
     log_dir = Path(cfg.execution.log_dir)
     afl_tmpdir = Path(cfg.engine.afl_tmpdir) if cfg.engine.afl_tmpdir else None
 
@@ -60,15 +60,16 @@ def _require_dir(path: Path, what: str) -> None:
         raise PathValidationError(f"missing {what}: {path}")
 
 
-def _validate(r: ResolvedPaths) -> None:
-    _require_file(r.main, "MAIN harness")
-    _require_file(r.cmplog, "CMPLOG harness")
-    if r.laf is not None:
-        _require_file(r.laf, "LAF harness")
-    if r.asan_main is not None:
-        _require_file(r.asan_main, "ASAN harness")
-    if r.dictionary is not None:
-        _require_file(r.dictionary, "dictionary")
-    _require_dir(r.seeds_dir, "seeds dir")
-    if r.afl_tmpdir is not None:
-        _require_dir(r.afl_tmpdir, "afl_tmpdir")
+def _validate(resolved_paths: ResolvedPaths) -> None:
+    _require_file(resolved_paths.main, "MAIN harness")
+    if resolved_paths.cmplog is not None:
+        _require_file(resolved_paths.cmplog, "CMPLOG harness")
+    if resolved_paths.laf is not None:
+        _require_file(resolved_paths.laf, "LAF harness")
+    if resolved_paths.asan_main is not None:
+        _require_file(resolved_paths.asan_main, "ASAN harness")
+    if resolved_paths.dictionary is not None:
+        _require_file(resolved_paths.dictionary, "dictionary")
+    _require_dir(resolved_paths.seeds_dir, "seeds dir")
+    if resolved_paths.afl_tmpdir is not None:
+        _require_dir(resolved_paths.afl_tmpdir, "afl_tmpdir")

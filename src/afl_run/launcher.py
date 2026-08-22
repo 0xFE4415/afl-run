@@ -122,11 +122,13 @@ async def _abort_if_any_died(fuzzers: tuple[FuzzerProcess, ...]) -> None:
     for fuzzer, error in errors:
         if error is not None:
             raise RuntimeError(f"fuzzer {fuzzer.name} wait failed: {error}") from error
-    fuzzer = tasks[next(iter(done))]
-    raise RuntimeError(
+    exited = tuple(tasks[task] for task in done)
+    details = "; ".join(
         f"fuzzer {fuzzer.name} exited with code {fuzzer.process.returncode}; "
         f"see log {fuzzer.log_path}"
+        for fuzzer in exited
     )
+    raise RuntimeError(details)
 
 
 async def _terminate_fuzzers(fuzzers: tuple[FuzzerProcess, ...]) -> None:

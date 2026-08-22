@@ -82,6 +82,14 @@ def test_build_cmplog_command() -> None:
     )
 
 
+def test_build_cmplog_command_requires_harness() -> None:
+    paths = relative_paths()
+    paths.cmplog = None
+
+    with pytest.raises(ValueError, match="not configured"):
+        build_cmplog_command(_config(), paths)
+
+
 def test_build_worker_specs() -> None:
     config = _config()
     config.execution.n_workers = 2
@@ -135,7 +143,7 @@ def test_reset_output_directory_creates_missing(tmp_path: Path) -> None:
     assert root.is_dir()
 
 
-@pytest.mark.parametrize("root", [Path("/"), Path.cwd()])
+@pytest.mark.parametrize("root", [Path("/"), Path.cwd(), Path("."), Path(".."), Path.cwd().parent])
 def test_reset_output_directory_refuses_unsafe_roots(root: Path) -> None:
     with pytest.raises(ValueError, match="unsafe"):
         reset_output_directory(root)
