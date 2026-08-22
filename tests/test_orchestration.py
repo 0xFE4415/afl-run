@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import override
 from unittest.mock import patch
 
 import pytest
@@ -176,6 +177,14 @@ class _Notifier:
         return None
 
 
+class _CreatingNotifier(_Notifier):
+    @override
+    def add_watch(self, path: str, mask: object) -> int:
+        result = super().add_watch(path, mask)
+        self.stats.write_text("")
+        return result
+
+
 class _Process:
     pid = 123
 
@@ -205,6 +214,20 @@ def test_wait_for_master_returns_if_stats_already_exists(tmp_path: Path) -> None
         wait_for_master(stats, _Process())
 
     notifier.assert_not_called()
+
+
+def test_wait_for_master_rechecks_after_installing_watch(tmp_path: Path) -> None:
+    stats = tmp_path / "main" / "fuzzer_stats"
+    stats.parent.mkdir()
+    notifier = _CreatingNotifier(stats)
+
+    with (
+        patch("afl_run.orchestration.INotify", return_value=notifier),
+        patch("afl_run.orchestration.os.pidfd_open") as pidfd_open,
+    ):
+        wait_for_master(stats, _Process())
+
+    pidfd_open.assert_not_called()
 
 
 def test_wait_for_master_raises_if_process_exits(tmp_path: Path) -> None:
