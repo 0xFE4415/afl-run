@@ -116,3 +116,11 @@ that resumed campaigns retain earlier output. Fresh campaigns truncate logs.
 On resume, an existing master `fuzzer_stats` file is treated as readiness for
 the master, so a stale file can hide a master startup failure until the normal
 fuzzer health check runs.
+
+### AFL++ Tuning
+
+The runner deliberately does not impose campaign-specific tuning such as
+`-l 2AT`, `-Z`, `-L 0`, varied power schedules, or worker-specific settings.
+Environment-based options such as `AFL_FINAL_SYNC=1` and
+`AFL_TESTCACHE_SIZE` can be supplied through `env.variables`; command-line
+tuning remains a future extension.
