@@ -71,6 +71,7 @@ Example:
     "timeout_ms": 2500,
     "timeout_asan_ms": null,
     "memory_limit_mb": 1024,
+    "memory_limit_asan_mb": 0,
     "max_input_length": 4096,
     "skip_deterministic": true,
     "asan_instances": 2,

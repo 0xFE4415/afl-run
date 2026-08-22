@@ -9,9 +9,12 @@ from types import TracebackType
 from typing import BinaryIO, Protocol, Self
 
 
-class AsyncProcess(Protocol):
+class ProcessLike(Protocol):
     @property
     def pid(self) -> int: ...
+
+
+class AsyncProcess(ProcessLike, Protocol):
 
     @property
     def returncode(self) -> int | None: ...
@@ -104,7 +107,10 @@ async def _abort_if_any_died(fuzzers: tuple[FuzzerProcess, ...]) -> None:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
     fuzzer = tasks[next(iter(done))]
-    raise RuntimeError(f"fuzzer {fuzzer.name} exited with code {fuzzer.process.returncode}")
+    raise RuntimeError(
+        f"fuzzer {fuzzer.name} exited with code {fuzzer.process.returncode}; "
+        f"see log {fuzzer.log_path}"
+    )
 
 
 async def _terminate_fuzzers(fuzzers: tuple[FuzzerProcess, ...]) -> None:

@@ -64,7 +64,7 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None
 
     with (
         patch("afl_run.cli.configure_host") as configure,
-        patch("afl_run.cli.prepare_shared_memory") as prepare,
+        patch("afl_run.cli.reset_output_directory") as prepare,
         patch("afl_run.cli.build_environment", return_value={"PATH": "/bin"}),
         patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
         patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()),
