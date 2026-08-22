@@ -6,7 +6,6 @@ import signal
 from pathlib import Path
 
 import click
-from pydantic import ValidationError
 
 from afl_run.config import Config
 from afl_run.environment import build_environment
@@ -20,7 +19,7 @@ from afl_run.orchestration import (
     reset_output_directory,
     wait_for_master,
 )
-from afl_run.paths import PathValidationError, ResolvedPaths, resolve_paths
+from afl_run.paths import ResolvedPaths, resolve_paths
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,11 +40,8 @@ def main(config_path: str, timeout: float | None, fresh: bool) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
         config = Config.model_validate_json(Path(config_path).read_text())
-    except ValidationError as error:
-        raise click.ClickException(str(error)) from error
-    try:
         resolved = resolve_paths(config)
-    except PathValidationError as error:
+    except ValueError as error:
         raise click.ClickException(str(error)) from error
     try:
         asyncio.run(_run_campaign(config, resolved, timeout, fresh))
