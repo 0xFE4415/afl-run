@@ -154,3 +154,15 @@ def test_cli_reports_missing_path(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "missing MAIN harness" in result.output
+
+
+def test_cli_reports_overlapping_output_directory(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        '{"paths": {"main": "main", "seeds_dir": "out", "out_dir": "out"}}'
+    )
+
+    result = CliRunner().invoke(main, [str(config_path)])
+
+    assert result.exit_code != 0
+    assert "must not equal or contain seeds_dir" in result.output

@@ -119,8 +119,8 @@ def _build_fuzzer_command(
 
 def reset_output_directory(root: Path) -> None:
     resolved_root = root.resolve()
-    protected_paths = (Path("/"), Path.home().resolve(), Path.cwd().resolve())
-    if any(protected_path.is_relative_to(resolved_root) for protected_path in protected_paths):
+    unsafe_paths = (Path("/"), Path.home().resolve(), Path.cwd().resolve())
+    if any(protected_path.is_relative_to(resolved_root) for protected_path in unsafe_paths):
         raise ValueError(f"refusing to remove unsafe output directory: {root}")
     if root.is_symlink() or (root.exists() and not root.is_dir()):
         raise ValueError(f"output directory is not a regular directory: {root}")
@@ -146,7 +146,12 @@ def wait_for_master(
         )
         if stats_path.is_file():
             return
-        pidfd = os.pidfd_open(master.pid)
+        try:
+            pidfd = os.pidfd_open(master.pid)
+        except ProcessLookupError:
+            if stats_path.is_file():
+                return
+            raise RuntimeError(f"master exited before creating {stats_path}") from None
         stack.callback(os.close, pidfd)
         _wait_for_events(stats_path, notifier, pidfd)
 

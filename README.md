@@ -53,10 +53,14 @@ timeout in seconds:
 afl-run --timeout 3600.5 config.json
 ```
 
+Use `--fresh` to remove the existing campaign output before starting. The
+configuration is rejected when `out_dir` equals or contains the configured
+seed, log, or AFL temporary directory.
+
 All paths must be supplied in the JSON configuration; no paths are derived or
-rewritten. See `config.json` for the configuration layout. Environment
-variables for child `afl-fuzz` processes are key/value pairs under
-`env.variables`.
+rewritten. The configuration layout is shown in the example below and defined
+by the pydantic models in `src/afl_run/config.py`. Environment variables for
+child `afl-fuzz` processes are key/value pairs under `env.variables`.
 
 `execution.n_workers` controls the number of standard worker instances. The
 master is always started separately. CmpLog, LAF, and ASAN instances are

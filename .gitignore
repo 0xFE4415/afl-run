@@ -13,6 +13,8 @@ sample/fuzz/*
 !sample/fuzz/.gitkeep
 sample/logs*/
 sample/out*/
+logs/
+sample/input.txt
 uv.lock
 .coverage
 .coverage.*
