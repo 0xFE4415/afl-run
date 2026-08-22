@@ -1,0 +1,41 @@
+[project]
+name = "afl-fuzz-runner"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.1",
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+afl-run = "cli:main"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "hypothesis>=6.0",
+]
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.0",
+    "ty>=0.0.1",
+    "ruff>=0.6",
+    "nox>=2024.0",
+]
+all = [
+    "afl-fuzz-runner[test,dev]",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = ["D"]
+
+[tool.setuptools]
+py-modules = ["cli", "config"]
