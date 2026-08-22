@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ExecutionConfig(BaseModel):
@@ -42,6 +42,15 @@ class EnvConfig(BaseModel):
 class HostConfig(BaseModel):
     randomize_va_space: str = "0"
     core_pattern: str = "core"
+
+    @field_validator("randomize_va_space")
+    @classmethod
+    def check_randomize_va_space(cls, value: str) -> str:
+        if value not in ("0", "1", "2"):
+            raise ValueError(
+                f"randomize_va_space must be one of '0', '1', '2', got {value!r}"
+            )
+        return value
 
 
 class Config(BaseModel):

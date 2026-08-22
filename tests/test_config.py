@@ -8,7 +8,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
+from afl_run.config import Config, EngineConfig, ExecutionConfig, HostConfig, PathConfig
 
 
 def test_default_config() -> None:
@@ -138,6 +138,17 @@ def test_out_dir_disjoint_protected_directories_are_accepted(
 def test_engine_rejects_negative_values(field: str) -> None:
     with pytest.raises(ValueError):
         EngineConfig.model_validate({field: -1})
+
+
+@pytest.mark.parametrize("value", ["0", "1", "2"])
+def test_host_accepts_valid_randomize_va_space(value: str) -> None:
+    assert HostConfig(randomize_va_space=value).randomize_va_space == value
+
+
+@pytest.mark.parametrize("value", ["", "3", "-1", "01", "on", "false"])
+def test_host_rejects_invalid_randomize_va_space(value: str) -> None:
+    with pytest.raises(ValidationError, match="randomize_va_space"):
+        HostConfig(randomize_va_space=value)
 
 
 def test_readme_config_example_matches_model() -> None:
