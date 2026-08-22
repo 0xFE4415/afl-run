@@ -28,3 +28,10 @@ mkdir -p sample/seeds
 printf 'seed\n' > sample/seeds/initial.txt
 afl-fuzz -i sample/seeds -o sample/out -- sample/build/afl_sample_harness
 ```
+
+The same harness can be launched through `afl-run` with the minimal
+meta-harness configuration:
+
+```sh
+afl-run sample/meta-harness.json
+```

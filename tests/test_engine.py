@@ -73,6 +73,13 @@ def test_additional_flags_are_appended_to_engine_args() -> None:
     )
 
 
+def test_engine_args_omit_unconfigured_dictionary() -> None:
+    paths = relative_paths()
+    paths.dictionary = None
+
+    assert "-x" not in build_common_no_cmplog_args(EngineConfig(), paths)
+
+
 def test_asan_args_use_scaled_timeout() -> None:
     config = EngineConfig(asan_timeout_scale=3, memory_limit_asan_mb=0)
     assert build_asan_args(config, relative_paths()) == (

@@ -1,0 +1,12 @@
+{
+  "execution": {
+    "n_instances": 1,
+    "fresh": true,
+    "log_dir": "sample/logs"
+  },
+  "paths": {
+    "main": "sample/build/afl_sample_harness",
+    "seeds_dir": "sample/seeds",
+    "out_dir": "sample/out"
+  }
+}

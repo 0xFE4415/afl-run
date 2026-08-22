@@ -11,12 +11,12 @@ class ExecutionConfig(BaseModel):
 
 class PathConfig(BaseModel):
     main: str
-    cmplog: str
-    laf: str | None = None
-    asan_main: str | None = None
-    dictionary: str
     seeds_dir: str
     out_dir: str
+    cmplog: str | None = None
+    laf: str | None = None
+    asan_main: str | None = None
+    dictionary: str | None = None
 
 
 class EngineConfig(BaseModel):
