@@ -71,5 +71,9 @@ def _validate(resolved_paths: ResolvedPaths) -> None:
     if resolved_paths.dictionary is not None:
         _require_file(resolved_paths.dictionary, "dictionary")
     _require_dir(resolved_paths.seeds_dir, "seeds dir")
+    if resolved_paths.out_dir.exists() and not resolved_paths.out_dir.is_dir():
+        raise PathValidationError(
+            f"out_dir is not a directory: {resolved_paths.out_dir}"
+        )
     if resolved_paths.afl_tmpdir is not None:
         _require_dir(resolved_paths.afl_tmpdir, "afl_tmpdir")

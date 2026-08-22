@@ -32,15 +32,18 @@ def _check_passwordless_sudo() -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-    except subprocess.CalledProcessError as error:
+    except (subprocess.CalledProcessError, OSError) as error:
         raise RuntimeError("passwordless sudo is required to configure the host") from error
 
 
 def _write_sysctl(path: Path, value: str) -> None:
-    subprocess.run(
-        ["sudo", "tee", str(path)],
-        input=f"{value}\n",
-        text=True,
-        check=True,
-        stdout=subprocess.DEVNULL,
-    )
+    try:
+        subprocess.run(
+            ["sudo", "tee", str(path)],
+            input=f"{value}\n",
+            text=True,
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"failed to write {path}") from error

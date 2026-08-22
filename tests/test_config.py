@@ -27,7 +27,11 @@ def test_afl_tmpdir_missing_is_accepted_before_path_resolution() -> None:
 
 
 def test_disjoint_directories_are_accepted() -> None:
-    cfg = Config(paths=minimal_path_config())
+    cfg = Config(
+        paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out"),
+        execution=ExecutionConfig(log_dir="logs"),
+        engine=EngineConfig(afl_tmpdir="tmp"),
+    )
 
     assert cfg.paths.out_dir == "out"
 

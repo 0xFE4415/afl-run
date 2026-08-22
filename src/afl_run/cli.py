@@ -24,6 +24,7 @@ from afl_run.paths import PathValidationError, ResolvedPaths, resolve_paths
 
 LOGGER = logging.getLogger(__name__)
 
+
 @click.command()
 @click.option("--fresh", is_flag=True, help="Remove existing campaign output before starting.")
 @click.option(
@@ -52,7 +53,7 @@ def main(config_path: str, timeout: float | None, fresh: bool) -> None:
         LOGGER.info("campaign interrupted")
     except TimeoutError:
         LOGGER.info("campaign timed out")
-    except (RuntimeError, ValueError) as error:
+    except (RuntimeError, ValueError, OSError) as error:
         raise click.ClickException(str(error)) from error
 
 
