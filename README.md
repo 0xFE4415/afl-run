@@ -38,9 +38,16 @@ uv run pytest
 
 ## Configuration
 
-Settings live in `config.py` (`Config` and its category models). Environment
-variables for the child `afl-fuzz` processes are kept as key/value pairs in
-`EnvConfig.variables`.
+All settings are described by the pydantic models in `src/afl_run/config.py`
+(`Config` and its category models) and supplied at runtime as a JSON file:
+
+```sh
+afl-run config.json
+```
+
+See `config.json` for the full default layout. Environment variables for the
+child `afl-fuzz` processes are kept as key/value pairs under
+`env.variables`.
 
 ## License
 
