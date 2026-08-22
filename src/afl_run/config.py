@@ -24,7 +24,8 @@ class PathConfig(BaseModel):
 class EngineConfig(BaseModel):
     timeout_ms: int = Field(default=2500, ge=0)
     timeout_asan_ms: int | None = Field(default=None, ge=0)
-    memory_limit_mb: int = Field(default=1024, ge=0)
+    memory_limit_mb: int | None = Field(default=None, ge=0)
+    memory_limit_asan_mb: int | None = Field(default=None, ge=0)
     max_input_length: int = Field(default=4096, ge=0)
     skip_deterministic: bool = True
     asan_instances: int = Field(default=2, ge=0)
@@ -40,18 +41,7 @@ class EngineConfig(BaseModel):
 
 
 class EnvConfig(BaseModel):
-    variables: dict[str, str] = Field(
-        default_factory=lambda: {
-            "AFL_MAP_SIZE": "262144",
-            "AFL_NO_AUTODICT": "1",
-            "AFL_FORKSRV_INIT_TMOUT": "60000",
-            "AFL_AUTORESUME": "1",
-            "ASAN_OPTIONS": (
-                "detect_leaks=0:abort_on_error=1:symbolize=0:"
-                "fast_unwind_on_malloc=1:malloc_context_size=0"
-            ),
-        }
-    )
+    variables: dict[str, str] = Field(default_factory=dict)
 
 
 class HostConfig(BaseModel):

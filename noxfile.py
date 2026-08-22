@@ -19,7 +19,7 @@ def ty(session: nox.Session) -> None:
 @nox.session
 def test(session: nox.Session) -> None:
     session.install("-e", ".[test]")
-    session.run("pytest", "--cov-fail-under=100", *session.posargs)
+    session.run("pytest", *session.posargs)
 
 
 @nox.session

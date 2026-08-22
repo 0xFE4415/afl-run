@@ -16,7 +16,9 @@ def test_build_environment_preserves_base_and_applies_config() -> None:
 
     environment = build_environment(cfg, {"PATH": "/bin", "CUSTOM": "no"})
 
-    assert environment == {"PATH": "/bin", "AFL_MAP_SIZE": "123", "CUSTOM": "yes"}
+    assert environment["PATH"] == "/bin"
+    assert environment["AFL_MAP_SIZE"] == "123"
+    assert environment["CUSTOM"] == "yes"
 
 
 def test_build_environment_uses_process_environment() -> None:

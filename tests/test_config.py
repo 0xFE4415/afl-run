@@ -12,7 +12,8 @@ def test_default_config() -> None:
     cfg = Config(paths=minimal_path_config())
     assert cfg.execution.n_instances == 1
     assert cfg.engine.timeout_ms == 2500
-    assert cfg.env.variables["AFL_MAP_SIZE"] == "262144"
+    assert cfg.engine.memory_limit_mb is None
+    assert cfg.env.variables == {}
 
 
 def test_afl_tmpdir_none_ok() -> None:
@@ -31,6 +32,7 @@ def test_afl_tmpdir_missing_raises() -> None:
         "timeout_ms",
         "timeout_asan_ms",
         "memory_limit_mb",
+        "memory_limit_asan_mb",
         "max_input_length",
         "asan_instances",
         "asan_timeout_scale",

@@ -6,6 +6,10 @@ from pathlib import Path
 from afl_run.config import Config
 
 
+class PathValidationError(ValueError):
+    pass
+
+
 @dataclass
 class ResolvedPaths:
     main: Path
@@ -45,12 +49,12 @@ def resolve_paths(cfg: Config) -> ResolvedPaths:
 
 def _require_file(path: Path, what: str) -> None:
     if not path.is_file():
-        raise SystemExit(f"missing {what}: {path}")
+        raise PathValidationError(f"missing {what}: {path}")
 
 
 def _require_dir(path: Path, what: str) -> None:
     if not path.is_dir():
-        raise SystemExit(f"missing {what}: {path}")
+        raise PathValidationError(f"missing {what}: {path}")
 
 
 def _validate(r: ResolvedPaths) -> None:
