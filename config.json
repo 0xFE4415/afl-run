@@ -32,5 +32,9 @@
       "AFL_AUTORESUME": "1",
       "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1:symbolize=0:fast_unwind_on_malloc=1:malloc_context_size=0"
     }
+  },
+  "host": {
+    "randomize_va_space": "0",
+    "core_pattern": "core"
   }
 }
