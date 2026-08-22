@@ -98,3 +98,18 @@ Example:
 `memory_limit_cmplog_mb` is independent from `memory_limit_mb` and defaults to
 unlimited (`null`). This is recommended because CmpLog can map substantially
 more memory; set it explicitly if the campaign requires a limit.
+
+### Host Configuration
+
+Before launching AFL++, the runner may set `kernel.randomize_va_space` and
+`kernel.core_pattern` using `sudo`. If either value needs changing,
+passwordless sudo is required; the runner uses `sudo -n` and aborts before
+writing anything when it is unavailable. If both values are already correct,
+sudo is not invoked.
+
+These settings affect the whole system and are not restored when the campaign
+ends. Consider using AFL++'s supported `afl-system-config` tool to manage the
+host configuration instead.
+
+When `execution.fresh` is false, existing per-fuzzer logs are appended to so
+that resumed campaigns retain earlier output. Fresh campaigns truncate logs.

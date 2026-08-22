@@ -98,6 +98,25 @@ def test_launch_fuzzer_closes_log_when_start_fails(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
+def test_launch_fuzzer_appends_existing_log_on_resume(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"previous output\n")
+    process = _process(pid=42)
+
+    async def run() -> FuzzerProcess:
+        with patch(
+            "afl_run.launcher.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=process),
+        ):
+            return await launch_fuzzer(("afl-fuzz",), "main", tmp_path, {}, append=True)
+
+    result = asyncio.run(run())
+    result.log_file.write(b"new output\n")
+    result.log_file.close()
+
+    assert log_path.read_bytes() == b"previous output\nnew output\n"
+
+
 def test_fuzzer_group_tracks_launched_fuzzer() -> None:
     fuzzer = FuzzerProcess("main", _process(), Path("main.log"), MagicMock())
 

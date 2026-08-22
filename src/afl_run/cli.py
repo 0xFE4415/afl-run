@@ -64,6 +64,7 @@ async def _run_campaign_with_signals(cfg: Config, resolved: ResolvedPaths) -> No
         resolved.out_dir.mkdir(parents=True, exist_ok=True)
 
     environment = build_environment(cfg)
+    append_logs = not cfg.execution.fresh
     async with FuzzerGroup() as group:
         master = await group.launch(
             build_master_command(cfg, resolved),
@@ -71,6 +72,7 @@ async def _run_campaign_with_signals(cfg: Config, resolved: ResolvedPaths) -> No
             resolved.log_dir,
             environment,
             tmp_root,
+            append_logs,
         )
         await asyncio.to_thread(
             wait_for_master,
@@ -84,8 +86,9 @@ async def _run_campaign_with_signals(cfg: Config, resolved: ResolvedPaths) -> No
             resolved.log_dir,
             environment,
             tmp_root,
+            append_logs,
         )
         for name, command in build_worker_specs(cfg, resolved):
-            await group.launch(command, name, resolved.log_dir, environment, tmp_root)
+            await group.launch(command, name, resolved.log_dir, environment, tmp_root, append_logs)
 
         await group.abort_if_any_died()

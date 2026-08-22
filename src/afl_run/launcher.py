@@ -69,8 +69,9 @@ class FuzzerGroup:
         log_dir: Path,
         environment: Mapping[str, str],
         tmp_root: Path | None = None,
+        append: bool = False,
     ) -> FuzzerProcess:
-        fuzzer = await launch_fuzzer(command, name, log_dir, environment, tmp_root)
+        fuzzer = await launch_fuzzer(command, name, log_dir, environment, tmp_root, append)
         self._fuzzers.append(fuzzer)
         return fuzzer
 
@@ -84,6 +85,7 @@ async def launch_fuzzer(
     log_dir: Path,
     environment: Mapping[str, str],
     tmp_root: Path | None = None,
+    append: bool = False,
 ) -> FuzzerProcess:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{name}.log"
@@ -93,7 +95,7 @@ async def launch_fuzzer(
         tmp_dir.mkdir(parents=True, exist_ok=True)
         child_environment["AFL_TMPDIR"] = str(tmp_dir)
 
-    log_file = log_path.open("wb")
+    log_file = log_path.open("ab" if append else "wb")
     try:
         LOGGER.info("starting %s: %s", name, shlex.join(command))
         process = await asyncio.create_subprocess_exec(
