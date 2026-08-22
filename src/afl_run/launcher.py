@@ -20,7 +20,7 @@ class AsyncProcess(Protocol):
     async def wait(self) -> int: ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class FuzzerProcess:
     name: str
     process: AsyncProcess
