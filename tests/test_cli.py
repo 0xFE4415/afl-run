@@ -21,7 +21,7 @@ def _config(
     optional: bool = False,
 ) -> tuple[Config, ResolvedPaths]:
     cfg = Config(
-        execution=ExecutionConfig(n_workers=n_workers, fresh=True),
+        execution=ExecutionConfig(n_workers=n_workers),
         paths=PathConfig(
             main="main",
             cmplog="cmplog",
@@ -73,7 +73,7 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None
         patch("afl_run.cli.FuzzerGroup.abort_if_any_died", new=AsyncMock()),
         patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
     ):
-        asyncio.run(_run_campaign(cfg, paths))
+        asyncio.run(_run_campaign(cfg, paths, fresh=True))
 
     configure.assert_called_once_with(cfg.host)
     prepare.assert_called_once_with(paths.out_dir)
@@ -82,8 +82,6 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None
 
 def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path)
-    cfg.execution.fresh = False
-
     async def launch(
         command: tuple[str, ...],
         name: str,
@@ -204,4 +202,4 @@ def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
     with patch("afl_run.cli._run_campaign_with_signals", new=AsyncMock()) as campaign:
         asyncio.run(_run_campaign(cfg, paths, timeout=1.5))
 
-    campaign.assert_awaited_once_with(cfg, paths)
+    campaign.assert_awaited_once_with(cfg, paths, False)

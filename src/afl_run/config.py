@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 
 class ExecutionConfig(BaseModel):
     n_workers: int = Field(default=0, ge=0)
-    fresh: bool = False
     log_dir: str = "logs"
 
 

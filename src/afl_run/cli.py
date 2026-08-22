@@ -24,6 +24,7 @@ from afl_run.paths import PathValidationError, ResolvedPaths, resolve_paths
 LOGGER = logging.getLogger(__name__)
 
 @click.command()
+@click.option("--fresh", is_flag=True, help="Remove existing campaign output before starting.")
 @click.option(
     "--timeout",
     type=click.FloatRange(min=0),
@@ -34,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
     "config_path",
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
-def main(config_path: str, timeout: float | None) -> None:
+def main(config_path: str, timeout: float | None, fresh: bool) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = Config.model_validate_json(Path(config_path).read_text())
     try:
@@ -42,7 +43,7 @@ def main(config_path: str, timeout: float | None) -> None:
     except PathValidationError as error:
         raise click.ClickException(str(error)) from error
     try:
-        asyncio.run(_run_campaign(cfg, resolved, timeout))
+        asyncio.run(_run_campaign(cfg, resolved, timeout, fresh))
     except asyncio.CancelledError:
         LOGGER.info("campaign interrupted")
     except TimeoutError:
@@ -53,6 +54,7 @@ async def _run_campaign(
     cfg: Config,
     resolved: ResolvedPaths,
     timeout: float | None = None,
+    fresh: bool = False,
 ) -> None:
     loop = asyncio.get_running_loop()
     task = asyncio.current_task()
@@ -61,7 +63,7 @@ async def _run_campaign(
         loop.add_signal_handler(signum, task.cancel)
 
     try:
-        campaign = _run_campaign_with_signals(cfg, resolved)
+        campaign = _run_campaign_with_signals(cfg, resolved, fresh)
         if timeout is None:
             await campaign
         else:
@@ -71,16 +73,18 @@ async def _run_campaign(
             loop.remove_signal_handler(signum)
 
 
-async def _run_campaign_with_signals(cfg: Config, resolved: ResolvedPaths) -> None:
+async def _run_campaign_with_signals(
+    cfg: Config, resolved: ResolvedPaths, fresh: bool
+) -> None:
     configure_host(cfg.host)
     tmp_root = resolved.afl_tmpdir
-    if cfg.execution.fresh:
+    if fresh:
         reset_output_directory(resolved.out_dir)
     else:
         resolved.out_dir.mkdir(parents=True, exist_ok=True)
 
     environment = build_environment(cfg)
-    append_logs = not cfg.execution.fresh
+    append_logs = not fresh
     async with FuzzerGroup() as group:
         master = await group.launch(
             build_master_command(cfg, resolved),

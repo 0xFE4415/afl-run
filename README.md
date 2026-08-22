@@ -66,7 +66,6 @@ Example:
 {
   "execution": {
     "n_workers": 4,
-    "fresh": false,
     "log_dir": "logs"
   },
   "paths": {
@@ -120,7 +119,7 @@ These settings affect the whole system and are not restored when the campaign
 ends. Consider using AFL++'s supported `afl-system-config` tool to manage the
 host configuration instead.
 
-When `execution.fresh` is false, existing per-fuzzer logs are appended to so
+When `--fresh` is not supplied, existing per-fuzzer logs are appended to so
 that resumed campaigns retain earlier output. Fresh campaigns truncate logs.
 On resume, an existing master `fuzzer_stats` file is treated as readiness for
 the master, so a stale file can hide a master startup failure until the normal

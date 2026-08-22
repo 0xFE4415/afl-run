@@ -1,7 +1,6 @@
 {
   "execution": {
     "n_workers": 2,
-    "fresh": true,
     "log_dir": "sample/logs-advanced"
   },
   "paths": {
