@@ -11,6 +11,7 @@ from types import TracebackType
 from typing import BinaryIO, Protocol, Self
 
 LOGGER = logging.getLogger(__name__)
+SHUTDOWN_TIMEOUT_SECONDS = 5
 
 
 class ProcessLike(Protocol):
@@ -24,6 +25,8 @@ class AsyncProcess(ProcessLike, Protocol):
     def returncode(self) -> int | None: ...
 
     def terminate(self) -> None: ...
+
+    def kill(self) -> None: ...
 
     async def wait(self) -> int: ...
 
@@ -119,10 +122,18 @@ async def _abort_if_any_died(fuzzers: tuple[FuzzerProcess, ...]) -> None:
 
 
 async def _terminate_fuzzers(fuzzers: tuple[FuzzerProcess, ...]) -> None:
-    for fuzzer in fuzzers:
-        if fuzzer.process.returncode is None:
-            fuzzer.process.terminate()
+    live_fuzzers = tuple(fuzzer for fuzzer in fuzzers if fuzzer.process.returncode is None)
+    for fuzzer in live_fuzzers:
+        fuzzer.process.terminate()
     try:
+        await asyncio.wait_for(
+            asyncio.gather(*(fuzzer.process.wait() for fuzzer in fuzzers)),
+            timeout=SHUTDOWN_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        for fuzzer in live_fuzzers:
+            if fuzzer.process.returncode is None:
+                fuzzer.process.kill()
         await asyncio.gather(*(fuzzer.process.wait() for fuzzer in fuzzers))
     finally:
         _close_logs(fuzzers)
