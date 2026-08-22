@@ -17,13 +17,15 @@ from afl_run.engine import (
 from afl_run.launcher import ProcessLike
 from afl_run.paths import ResolvedPaths
 
+MASTER_NAME = "main"
+
 
 def build_master_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
     return _build_standard_command(
         config,
         paths,
         "-M",
-        "main",
+        MASTER_NAME,
         paths.main,
         include_cmplog=False,
     )

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from click.testing import CliRunner
 
-from afl_run.cli import _run_campaign
+from afl_run.cli import _run_campaign, main
 from afl_run.config import Config, ExecutionConfig, PathConfig
 from afl_run.launcher import FuzzerProcess
 from afl_run.paths import ResolvedPaths
@@ -158,3 +160,21 @@ def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
             asyncio.run(_run_campaign(cfg, paths))
 
     exit_group.assert_awaited_once()
+
+
+def test_main_handles_campaign_cancellation(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}")
+
+    def cancel(campaign: Any) -> None:
+        campaign.close()
+        raise asyncio.CancelledError
+
+    with (
+        patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
+        patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
+        patch("afl_run.cli.asyncio.run", side_effect=cancel),
+    ):
+        result = CliRunner().invoke(main, [str(config_path)])
+
+    assert result.exit_code == 0
