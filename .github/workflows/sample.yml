@@ -1,0 +1,58 @@
+name: sample
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/sample.yml
+      - sample/**
+      - src/**
+      - pyproject.toml
+
+concurrency:
+  group: sample-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/apt/archives
+          key: apt-${{ runner.os }}-aflpp-v1
+      - name: Install AFL++
+        run: |
+          mkdir -p "$HOME/.cache/apt/archives"
+          sudo apt-get update
+          sudo apt-get \
+            -o Dir::Cache::archives="$HOME/.cache/apt/archives" \
+            install -y afl++
+      - name: Build instrumented harness
+        run: |
+          cmake -S sample -B sample/build-afl -DCMAKE_CXX_COMPILER=afl-c++
+          cmake --build sample/build-afl
+      - name: Run short campaign
+        env:
+          AFL_NO_AFFINITY: "1"
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+        run: |
+          uv run afl-run --fresh --timeout 5 sample/config.json
+      - name: Verify campaign output
+        run: |
+          if ! test -f sample/fuzz/out/main/fuzzer_stats; then
+            echo "AFL++ did not create fuzzer_stats"
+            echo "sample/fuzz contents:"
+            find sample/fuzz -maxdepth 4 -print
+            echo "main.log files:"
+            find . -type f -name main.log -print -exec cat {} \;
+            exit 1
+          fi
+          ls sample/fuzz/out/main

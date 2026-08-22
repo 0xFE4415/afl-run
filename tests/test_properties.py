@@ -61,7 +61,6 @@ def test_afl_tmpdir_rejects_nonexistent(path: str, tmp_path: Path) -> None:
     engine=st.builds(
         EngineConfig,
         timeout_ms=st.integers(min_value=0, max_value=100_000),
-        timeout_asan_ms=st.none() | st.integers(min_value=0, max_value=100_000),
         memory_limit_mb=st.none() | st.integers(min_value=0, max_value=100_000),
         memory_limit_cmplog_mb=st.none() | st.integers(min_value=0, max_value=100_000),
         memory_limit_asan_mb=st.none() | st.integers(min_value=0, max_value=100_000),

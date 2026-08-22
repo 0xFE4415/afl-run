@@ -133,7 +133,6 @@ def test_out_dir_disjoint_protected_directories_are_accepted(
     "field",
     [
         "timeout_ms",
-        "timeout_asan_ms",
         "memory_limit_mb",
         "memory_limit_cmplog_mb",
         "memory_limit_asan_mb",

@@ -24,8 +24,16 @@ def test_common_no_cmplog_can_disable_deterministic_skip() -> None:
     )
 
 
+def test_deterministic_skip_is_disabled_by_default() -> None:
+    assert "-z" not in build_common_no_cmplog_args(EngineConfig(), relative_paths())
+
+
 def test_cmplog_args_use_independent_memory_limit() -> None:
-    config = EngineConfig(memory_limit_mb=1024, memory_limit_cmplog_mb=2048)
+    config = EngineConfig(
+        memory_limit_mb=1024,
+        memory_limit_cmplog_mb=2048,
+        skip_deterministic=True,
+    )
     assert build_cmplog_args(config, relative_paths()) == (
         "-G",
         "4096",
@@ -63,7 +71,7 @@ def test_engine_args_omit_unconfigured_dictionary() -> None:
 
 
 def test_asan_args_use_scaled_timeout() -> None:
-    config = EngineConfig(asan_timeout_scale=3, memory_limit_asan_mb=0)
+    config = EngineConfig(asan_timeout_scale=3, memory_limit_asan_mb=0, skip_deterministic=True)
     assert build_asan_args(config, relative_paths()) == (
         "-G",
         "4096",
@@ -79,7 +87,6 @@ def test_asan_args_use_scaled_timeout() -> None:
 
 def test_asan_args_use_explicit_timeout() -> None:
     config = EngineConfig(
-        timeout_asan_ms=8000,
         memory_limit_asan_mb=512,
         skip_deterministic=False,
     )
@@ -89,7 +96,7 @@ def test_asan_args_use_explicit_timeout() -> None:
         "-m",
         "512",
         "-t",
-        "8000",
+        "5000",
         "-x",
         "dict",
     )
@@ -143,17 +150,15 @@ def test_asan_args_scale_timeout(timeout: int, scale: int) -> None:
 @given(
     timeout=st.integers(min_value=0, max_value=1_000_000),
     scale=st.integers(min_value=0, max_value=100),
-    explicit=st.integers(min_value=0, max_value=1_000_000),
 )
 def test_asan_args_explicit_timeout_overrides_scale(
-    timeout: int, scale: int, explicit: int
+    timeout: int, scale: int
 ) -> None:
     config = EngineConfig(
         timeout_ms=timeout,
         asan_timeout_scale=scale,
-        timeout_asan_ms=explicit,
     )
 
     args = build_asan_args(config, relative_paths())
 
-    assert args[2:4] == ("-t", str(explicit))
+    assert args[2:4] == ("-t", str(timeout * scale))
