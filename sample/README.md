@@ -86,10 +86,10 @@ Generated build, log, and campaign-output directories are ignored by Git.
 ## 6. Run an advanced campaign
 
 `advanced-config.json` starts one main instance, one CmpLog instance, one LAF
-instance, and two standard workers (`s1` and `s2`). The sample has only one
-instrumented binary, so its CmpLog and LAF paths intentionally point to the
-same executable. Replace those paths with dedicated CmpLog and LAF builds for
-a production campaign.
+instance, one ASAN instance, and two standard workers (`s1` and `s2`). The
+sample has only one instrumented binary, so its CmpLog, LAF, and ASAN paths
+intentionally point to the same executable. Replace those paths with
+dedicated builds for a production campaign.
 
 ```sh
 AFL_NO_AFFINITY=1 uv run afl-run --fresh --timeout 3600 sample/advanced-config.json
