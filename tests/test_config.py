@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 from helpers import minimal_path_config
+from hypothesis import given
+from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
@@ -62,6 +64,62 @@ def test_out_dir_containing_afl_tmpdir_is_rejected() -> None:
             paths=PathConfig(main="main", seeds_dir="seeds", out_dir="campaign"),
             engine=EngineConfig(afl_tmpdir="campaign/tmp"),
         )
+
+
+def _config_with_protected(field: str, protected: str, out_dir: str) -> Config:
+    paths = PathConfig(main="main", seeds_dir="seeds", out_dir=out_dir)
+    execution = ExecutionConfig(log_dir="logs")
+    engine = EngineConfig()
+    if field == "seeds_dir":
+        paths.seeds_dir = protected
+    elif field == "log_dir":
+        execution.log_dir = protected
+    else:
+        engine.afl_tmpdir = protected
+    return Config(paths=paths, execution=execution, engine=engine)
+
+
+_path_segments = st.lists(
+    st.from_regex(r"[a-z][a-z0-9_-]{0,7}", fullmatch=True),
+    min_size=1,
+    max_size=4,
+)
+
+_path_suffix = st.lists(
+    st.from_regex(r"[a-z][a-z0-9_-]{0,7}", fullmatch=True),
+    max_size=4,
+)
+
+
+@given(
+    field=st.sampled_from(["seeds_dir", "log_dir", "afl_tmpdir"]),
+    prefix=_path_segments,
+    suffix=_path_suffix,
+)
+def test_out_dir_overlapping_protected_directory_is_rejected(
+    field: str, prefix: list[str], suffix: list[str]
+) -> None:
+    out_dir = "/".join(prefix)
+    protected = "/".join([*prefix, *suffix])
+
+    with pytest.raises(ValidationError, match=field):
+        _config_with_protected(field, protected, out_dir)
+
+
+@given(
+    field=st.sampled_from(["seeds_dir", "log_dir", "afl_tmpdir"]),
+    out_segments=_path_segments,
+    protected_segments=_path_segments,
+)
+def test_out_dir_disjoint_protected_directories_are_accepted(
+    field: str, out_segments: list[str], protected_segments: list[str]
+) -> None:
+    out_dir = "/".join(["out", *out_segments])
+    protected = "/".join(["protected", *protected_segments])
+
+    cfg = _config_with_protected(field, protected, out_dir)
+
+    assert cfg.paths.out_dir == out_dir
 
 
 @pytest.mark.parametrize(

@@ -3,26 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from helpers import minimal_path_config
 from hypothesis import given
 from hypothesis import strategies as st
 
-from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
-from afl_run.paths import resolve_paths
-
-
-@given(
-    n=st.integers(min_value=0, max_value=64),
-    timeout=st.integers(min_value=1, max_value=60000),
+from afl_run.config import (
+    Config,
+    EngineConfig,
+    EnvConfig,
+    ExecutionConfig,
+    HostConfig,
+    PathConfig,
 )
-def test_config_roundtrip(n: int, timeout: int) -> None:
-    cfg = Config(
-        paths=minimal_path_config(),
-        execution=ExecutionConfig(n_workers=n),
-        engine=EngineConfig(timeout_ms=timeout),
-    )
-    restored = Config.model_validate(cfg.model_dump())
-    assert restored == cfg
+from afl_run.paths import resolve_paths
 
 
 @pytest.mark.parametrize("path", ["/no/such/dir/abc123", "/tmp/does-not-exist-xyz"])
@@ -48,3 +40,61 @@ def test_afl_tmpdir_rejects_nonexistent(path: str, tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         resolve_paths(cfg)
+
+
+@given(
+    execution=st.builds(
+        ExecutionConfig,
+        n_workers=st.integers(min_value=0, max_value=64),
+        log_dir=st.sampled_from(["logs", "var/logs"]),
+    ),
+    paths=st.builds(
+        PathConfig,
+        main=st.just("main"),
+        cmplog=st.none() | st.just("cmplog"),
+        laf=st.none() | st.just("laf"),
+        asan_main=st.none() | st.just("asan"),
+        dictionary=st.none() | st.just("dict"),
+        seeds_dir=st.just("seeds"),
+        out_dir=st.just("out"),
+    ),
+    engine=st.builds(
+        EngineConfig,
+        timeout_ms=st.integers(min_value=0, max_value=100_000),
+        timeout_asan_ms=st.none() | st.integers(min_value=0, max_value=100_000),
+        memory_limit_mb=st.none() | st.integers(min_value=0, max_value=100_000),
+        memory_limit_cmplog_mb=st.none() | st.integers(min_value=0, max_value=100_000),
+        memory_limit_asan_mb=st.none() | st.integers(min_value=0, max_value=100_000),
+        max_input_length=st.integers(min_value=0, max_value=100_000),
+        skip_deterministic=st.booleans(),
+        asan_instances=st.integers(min_value=0, max_value=64),
+        asan_timeout_scale=st.integers(min_value=0, max_value=64),
+        afl_tmpdir=st.none() | st.just("tmpdir"),
+        additional_flags=st.lists(
+            st.from_regex(r"--?[a-z]{1,6}", fullmatch=True), max_size=3
+        ).map(tuple),
+    ),
+    env=st.builds(
+        EnvConfig,
+        variables=st.dictionaries(
+            st.from_regex(r"[A-Z][A-Z0-9_]{0,9}", fullmatch=True),
+            st.from_regex(r"[a-z0-9]{1,8}", fullmatch=True),
+            max_size=3,
+        ),
+    ),
+    host=st.builds(
+        HostConfig,
+        randomize_va_space=st.sampled_from(["0", "1", "2"]),
+        core_pattern=st.sampled_from(["core", "core.%p"]),
+    ),
+)
+def test_config_roundtrip(
+    execution: ExecutionConfig,
+    paths: PathConfig,
+    engine: EngineConfig,
+    env: EnvConfig,
+    host: HostConfig,
+) -> None:
+    cfg = Config(execution=execution, paths=paths, engine=engine, env=env, host=host)
+    restored = Config.model_validate(cfg.model_dump())
+    assert restored == cfg
