@@ -18,7 +18,14 @@ def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ..
         if config.timeout_asan_ms is not None
         else config.timeout_ms * config.asan_timeout_scale
     )
-    args = ["-G", str(config.globals), "-t", str(timeout), "-x", str(paths.dictionary)]
+    args = [
+        "-G",
+        str(config.max_input_length),
+        "-t",
+        str(timeout),
+        "-x",
+        str(paths.dictionary),
+    ]
     if config.skip_deterministic:
         args.append("-z")
     return tuple(args)
@@ -33,7 +40,7 @@ def _build_args(
 ) -> tuple[str, ...]:
     args = [
         "-G",
-        str(config.globals),
+        str(config.max_input_length),
         "-m",
         str(config.memory_limit_mb),
         "-t",
