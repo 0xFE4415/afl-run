@@ -1,8 +1,7 @@
 # afl-fuzz-runner
 
-Python launcher for AFL++ fuzzing campaigns against the decompiler harness,
-replacing the original `run.sh`. Configuration is modelled with pydantic and
-driven via a Click CLI (with optional JSON config overrides).
+Python launcher for AFL++ fuzzing campaigns. Configuration is modelled with
+pydantic and driven via a Click CLI.
 
 ## Requirements
 
