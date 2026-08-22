@@ -124,6 +124,8 @@ def wait_for_master(
             str(stats_path.parent),
             flags.CREATE | flags.MOVED_TO | flags.CLOSE_WRITE,
         )
+        if stats_path.is_file():
+            return
         pidfd = os.pidfd_open(master.pid)
         stack.callback(os.close, pidfd)
         _wait_for_events(stats_path, notifier, pidfd)
