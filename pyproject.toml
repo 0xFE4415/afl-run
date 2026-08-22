@@ -8,16 +8,18 @@ dependencies = [
 ]
 
 [project.scripts]
-afl-run = "cli:main"
+afl-run = "afl_run.cli:main"
 
 [project.optional-dependencies]
 test = [
     "pytest>=8.0",
     "hypothesis>=6.0",
+    "pytest-cov>=5.0",
 ]
 dev = [
     "pytest>=8.0",
     "hypothesis>=6.0",
+    "pytest-cov>=5.0",
     "ty>=0.0.1",
     "ruff>=0.6",
     "nox>=2024.0",
@@ -28,6 +30,14 @@ all = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=afl_run --cov-branch --cov-report=term-missing"
+
+[tool.coverage.run]
+branch = true
+source = ["afl_run"]
+
+[tool.coverage.report]
+show_missing = true
 
 [tool.ruff]
 line-length = 100
@@ -37,5 +47,5 @@ target-version = "py313"
 select = ["E", "F", "I", "W", "UP"]
 ignore = ["D"]
 
-[tool.setuptools]
-py-modules = ["cli", "config"]
+[tool.setuptools.packages.find]
+where = ["src"]

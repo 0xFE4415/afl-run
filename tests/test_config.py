@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from config import Config, EngineConfig
+from afl_run.config import Config, EngineConfig
 
 
 def test_default_config() -> None:

@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from config import Config, EngineConfig, ExecutionConfig
+from afl_run.config import Config, EngineConfig, ExecutionConfig
 
 
 @given(
