@@ -149,6 +149,8 @@ def _wait_for_events(stats_path: Path, notifier: INotify, pidfd: int) -> None:
         while True:
             for key, _ in selector.select():
                 if key.data == "process":
+                    if stats_path.is_file():
+                        return
                     raise RuntimeError(f"master exited before creating {stats_path}")
                 notifier.read()
                 if stats_path.is_file():

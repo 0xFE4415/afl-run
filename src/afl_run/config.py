@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import ClassVar
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -42,25 +41,7 @@ class EngineConfig(BaseModel):
 
 
 class EnvConfig(BaseModel):
-    DEFAULT_VARIABLES: ClassVar[dict[str, str]] = {
-        "AFL_MAP_SIZE": "262144",
-        "AFL_NO_AUTODICT": "1",
-        "AFL_FORKSRV_INIT_TMOUT": "60000",
-        "AFL_AUTORESUME": "1",
-        "ASAN_OPTIONS": (
-            "detect_leaks=0:abort_on_error=1:symbolize=0:"
-            "fast_unwind_on_malloc=1:malloc_context_size=0"
-        ),
-    }
-
-    variables: dict[str, str] = Field(
-        default_factory=lambda: dict(EnvConfig.DEFAULT_VARIABLES)
-    )
-
-    @field_validator("variables")
-    @classmethod
-    def _merge_defaults(cls, variables: dict[str, str]) -> dict[str, str]:
-        return {**cls.DEFAULT_VARIABLES, **variables}
+    variables: dict[str, str] = Field(default_factory=dict)
 
 
 class HostConfig(BaseModel):

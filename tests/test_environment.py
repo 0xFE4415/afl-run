@@ -19,18 +19,6 @@ def test_build_environment_preserves_base_and_applies_config() -> None:
     assert environment["PATH"] == "/bin"
     assert environment["AFL_MAP_SIZE"] == "123"
     assert environment["CUSTOM"] == "yes"
-    assert environment["AFL_NO_AUTODICT"] == "1"
-    assert environment["AFL_AUTORESUME"] == "1"
-
-
-def test_build_environment_merges_user_variables_over_defaults() -> None:
-    cfg = Config(paths=minimal_path_config(), env=EnvConfig(variables={"CUSTOM": "yes"}))
-
-    environment = build_environment(cfg, {})
-
-    assert environment["CUSTOM"] == "yes"
-    assert environment["AFL_MAP_SIZE"] == "262144"
-    assert "ASAN_OPTIONS" in environment
 
 
 def test_build_environment_uses_process_environment() -> None:
@@ -53,4 +41,4 @@ def test_build_environment_merges_arbitrary_mappings(
 
     environment = build_environment(cfg, base)
 
-    assert environment == {**base, **EnvConfig.DEFAULT_VARIABLES, **variables}
+    assert environment == {**base, **variables}

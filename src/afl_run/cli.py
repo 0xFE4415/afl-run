@@ -16,7 +16,7 @@ from afl_run.orchestration import (
     reset_output_directory,
     wait_for_master,
 )
-from afl_run.paths import ResolvedPaths, resolve_paths
+from afl_run.paths import PathValidationError, ResolvedPaths, resolve_paths
 
 
 @click.command()
@@ -26,7 +26,10 @@ from afl_run.paths import ResolvedPaths, resolve_paths
 )
 def main(config_path: str) -> None:
     cfg = Config.model_validate_json(Path(config_path).read_text())
-    resolved = resolve_paths(cfg)
+    try:
+        resolved = resolve_paths(cfg)
+    except PathValidationError as error:
+        raise click.ClickException(str(error)) from error
     asyncio.run(_run_campaign(cfg, resolved))
 
 

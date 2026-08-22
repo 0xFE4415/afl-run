@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -152,8 +153,9 @@ class _EventKey:
 
 
 class _Selector:
-    def __init__(self, events: list[str]) -> None:
+    def __init__(self, events: list[str], on_select: Callable[[], None] | None = None) -> None:
         self.events = events
+        self.on_select = on_select
 
     def __enter__(self) -> _Selector:
         return self
@@ -165,6 +167,8 @@ class _Selector:
         return None
 
     def select(self) -> list[tuple[_EventKey, object]]:
+        if self.on_select is not None:
+            self.on_select()
         return [(_EventKey(self.events.pop(0)), object())]
 
 
@@ -279,3 +283,21 @@ def test_wait_for_master_raises_if_process_exits(tmp_path: Path) -> None:
     ):
         with pytest.raises(RuntimeError):
             wait_for_master(tmp_path / "fuzzer_stats", _Process())
+
+
+def test_wait_for_master_accepts_stats_created_with_process_event(tmp_path: Path) -> None:
+    stats = tmp_path / "main" / "fuzzer_stats"
+    stats.parent.mkdir()
+
+    def create_stats() -> None:
+        stats.write_text("")
+
+    selector = _Selector(["process"], on_select=create_stats)
+
+    with (
+        patch("afl_run.orchestration.INotify"),
+        patch("afl_run.orchestration.selectors.DefaultSelector", return_value=selector),
+        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
+        patch("afl_run.orchestration.os.close"),
+    ):
+        wait_for_master(stats, _Process())

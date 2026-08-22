@@ -13,7 +13,7 @@ def test_default_config() -> None:
     assert cfg.execution.n_instances == 1
     assert cfg.engine.timeout_ms == 2500
     assert cfg.engine.memory_limit_mb is None
-    assert cfg.env.variables["AFL_MAP_SIZE"] == "262144"
+    assert cfg.env.variables == {}
 
 
 def test_afl_tmpdir_none_ok() -> None:

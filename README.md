@@ -49,6 +49,9 @@ rewritten. See `config.json` for the configuration layout. Environment
 variables for child `afl-fuzz` processes are key/value pairs under
 `env.variables`.
 
+`execution.n_instances` includes the master. For example, `1` starts only the
+master, while `4` starts the master plus workers `s1`, `s2`, and `s3`.
+
 Example:
 
 ```json
