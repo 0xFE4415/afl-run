@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import selectors
 import shutil
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Protocol
 
@@ -72,25 +73,26 @@ def wait_for_master(
     if stats_path.is_file():
         return
 
-    notifier = INotify()
-    try:
+    with ExitStack() as stack:
+        notifier = INotify()
+        stack.callback(notifier.close)
         notifier.add_watch(
             str(stats_path.parent),
             flags.CREATE | flags.MOVED_TO | flags.CLOSE_WRITE,
         )
         pidfd = os.pidfd_open(master.pid)
-        try:
-            with selectors.DefaultSelector() as selector:
-                selector.register(notifier.fileno(), selectors.EVENT_READ, "filesystem")
-                selector.register(pidfd, selectors.EVENT_READ, "process")
-                while True:
-                    for key, _ in selector.select():
-                        if key.data == "process":
-                            raise RuntimeError(f"master exited before creating {stats_path}")
-                        notifier.read()
-                        if stats_path.is_file():
-                            return
-        finally:
-            os.close(pidfd)
-    finally:
-        notifier.close()
+        stack.callback(os.close, pidfd)
+        _wait_for_events(stats_path, notifier, pidfd)
+
+
+def _wait_for_events(stats_path: Path, notifier: INotify, pidfd: int) -> None:
+    with selectors.DefaultSelector() as selector:
+        selector.register(notifier.fileno(), selectors.EVENT_READ, "filesystem")
+        selector.register(pidfd, selectors.EVENT_READ, "process")
+        while True:
+            for key, _ in selector.select():
+                if key.data == "process":
+                    raise RuntimeError(f"master exited before creating {stats_path}")
+                notifier.read()
+                if stats_path.is_file():
+                    return
