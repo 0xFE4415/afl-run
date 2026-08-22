@@ -71,14 +71,14 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None
         patch("afl_run.cli.reset_output_directory") as prepare,
         patch("afl_run.cli.build_environment", return_value={"PATH": "/bin"}),
         patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
-        patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()),
+        patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()) as to_thread,
         patch("afl_run.cli.FuzzerGroup.abort_if_any_died", new=AsyncMock()),
         patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
     ):
         asyncio.run(_run_campaign(cfg, paths, fresh=True))
 
-    configure.assert_called_once_with(cfg.host)
-    prepare.assert_called_once_with(paths.out_dir)
+    to_thread.assert_any_await(configure, cfg.host)
+    to_thread.assert_any_await(prepare, paths.out_dir)
     assert launched == ["main", "cmplog", "s1", "s2", "s3", "laf", "asan1", "asan2"]
 
 
@@ -160,7 +160,7 @@ def test_run_campaign_terminates_started_fuzzers_on_failure(tmp_path: Path) -> N
         patch("afl_run.cli.FuzzerGroup.launch", new=AsyncMock(return_value=master)),
         patch(
             "afl_run.cli.asyncio.to_thread",
-            new=AsyncMock(side_effect=RuntimeError("master failed")),
+            new=AsyncMock(side_effect=[None, RuntimeError("master failed")]),
         ),
         patch(
             "afl_run.cli.FuzzerGroup.__aexit__",
@@ -241,6 +241,21 @@ def test_main_handles_campaign_timeout(tmp_path: Path) -> None:
         result = CliRunner().invoke(main, ["--timeout", "1.5", str(config_path)])
 
     assert result.exit_code == 0
+
+
+def test_main_reports_campaign_runtime_error(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}")
+
+    with (
+        patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
+        patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
+        patch("afl_run.cli.asyncio.run", side_effect=RuntimeError("campaign failed")),
+    ):
+        result = CliRunner().invoke(main, [str(config_path)])
+
+    assert result.exit_code == 1
+    assert "Error: campaign failed" in result.output
 
 
 def test_run_campaign_applies_timeout(tmp_path: Path) -> None:

@@ -266,6 +266,27 @@ def test_wait_for_master_rechecks_after_installing_watch(tmp_path: Path) -> None
     pidfd_open.assert_not_called()
 
 
+@pytest.mark.parametrize("stats_exists", [True, False])
+def test_wait_for_master_handles_reaped_master(tmp_path: Path, stats_exists: bool) -> None:
+    stats = tmp_path / "main" / "fuzzer_stats"
+    stats.parent.mkdir()
+
+    def pidfd_open(_: int) -> int:
+        if stats_exists:
+            stats.write_text("")
+        raise ProcessLookupError
+
+    with (
+        patch("afl_run.orchestration.INotify"),
+        patch("afl_run.orchestration.os.pidfd_open", side_effect=pidfd_open),
+    ):
+        if stats_exists:
+            wait_for_master(stats, _Process())
+        else:
+            with pytest.raises(RuntimeError, match="master exited before creating"):
+                wait_for_master(stats, _Process())
+
+
 def test_wait_for_master_creates_missing_master_directory(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     script = (

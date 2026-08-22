@@ -6,6 +6,7 @@ import signal
 from pathlib import Path
 
 import click
+from pydantic import ValidationError
 
 from afl_run.config import Config
 from afl_run.environment import build_environment
@@ -37,7 +38,10 @@ LOGGER = logging.getLogger(__name__)
 )
 def main(config_path: str, timeout: float | None, fresh: bool) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    cfg = Config.model_validate_json(Path(config_path).read_text())
+    try:
+        cfg = Config.model_validate_json(Path(config_path).read_text())
+    except ValidationError as error:
+        raise click.ClickException(str(error)) from error
     try:
         resolved = resolve_paths(cfg)
     except PathValidationError as error:
@@ -48,6 +52,8 @@ def main(config_path: str, timeout: float | None, fresh: bool) -> None:
         LOGGER.info("campaign interrupted")
     except TimeoutError:
         LOGGER.info("campaign timed out")
+    except (RuntimeError, ValueError) as error:
+        raise click.ClickException(str(error)) from error
 
 
 async def _run_campaign(
@@ -59,7 +65,7 @@ async def _run_campaign(
     loop = asyncio.get_running_loop()
     task = asyncio.current_task()
     assert task is not None
-    for signum in (signal.SIGTERM, signal.SIGHUP):
+    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
         loop.add_signal_handler(signum, task.cancel)
 
     try:
@@ -69,17 +75,17 @@ async def _run_campaign(
         else:
             await asyncio.wait_for(campaign, timeout=timeout)
     finally:
-        for signum in (signal.SIGTERM, signal.SIGHUP):
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             loop.remove_signal_handler(signum)
 
 
 async def _run_campaign_with_signals(
     cfg: Config, resolved: ResolvedPaths, fresh: bool
 ) -> None:
-    configure_host(cfg.host)
+    await asyncio.to_thread(configure_host, cfg.host)
     tmp_root = resolved.afl_tmpdir
     if fresh:
-        reset_output_directory(resolved.out_dir)
+        await asyncio.to_thread(reset_output_directory, resolved.out_dir)
     else:
         resolved.out_dir.mkdir(parents=True, exist_ok=True)
 

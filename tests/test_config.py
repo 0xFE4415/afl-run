@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 from helpers import minimal_path_config
+from pydantic import ValidationError
 
-from afl_run.config import Config, EngineConfig
+from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
 
 
 def test_default_config() -> None:
@@ -23,6 +24,40 @@ def test_afl_tmpdir_none_ok() -> None:
 
 def test_afl_tmpdir_missing_is_accepted_before_path_resolution() -> None:
     assert EngineConfig(afl_tmpdir="/no/such/dir/abc123").afl_tmpdir == "/no/such/dir/abc123"
+
+
+def test_disjoint_directories_are_accepted() -> None:
+    cfg = Config(paths=minimal_path_config())
+
+    assert cfg.paths.out_dir == "out"
+
+
+def test_out_dir_equal_to_seeds_dir_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="seeds_dir"):
+        Config(paths=PathConfig(main="main", seeds_dir="out", out_dir="out"))
+
+
+def test_out_dir_containing_seeds_dir_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="seeds_dir"):
+        Config(
+            paths=PathConfig(main="main", seeds_dir="campaign/seeds", out_dir="campaign")
+        )
+
+
+def test_out_dir_equal_to_log_dir_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="log_dir"):
+        Config(
+            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="logs"),
+            execution=ExecutionConfig(log_dir="logs"),
+        )
+
+
+def test_out_dir_containing_afl_tmpdir_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="afl_tmpdir"):
+        Config(
+            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="campaign"),
+            engine=EngineConfig(afl_tmpdir="campaign/tmp"),
+        )
 
 
 @pytest.mark.parametrize(

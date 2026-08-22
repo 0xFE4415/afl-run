@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pathlib import Path
+from typing import Self
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class ExecutionConfig(BaseModel):
@@ -47,3 +50,18 @@ class Config(BaseModel):
     engine: EngineConfig = Field(default_factory=EngineConfig)
     env: EnvConfig = Field(default_factory=EnvConfig)
     host: HostConfig = Field(default_factory=HostConfig)
+
+    @model_validator(mode="after")
+    def reject_output_overlapping_directories(self) -> Self:
+        out_dir = Path(self.paths.out_dir).resolve()
+        protected = (
+            ("seeds_dir", self.paths.seeds_dir),
+            ("log_dir", self.execution.log_dir),
+            ("afl_tmpdir", self.engine.afl_tmpdir),
+        )
+        for name, value in protected:
+            if value is not None and Path(value).resolve().is_relative_to(out_dir):
+                raise ValueError(
+                    f"out_dir {self.paths.out_dir!r} must not equal or contain {name} {value!r}"
+                )
+        return self
