@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 from unittest.mock import patch
 
 import pytest
 
 from afl_run.config import Config, PathConfig
 from afl_run.orchestration import (
-    ProcessLike,
     build_cmplog_command,
     build_master_command,
     prepare_shared_memory,
@@ -178,7 +176,10 @@ def test_wait_for_master_returns_if_stats_already_exists(tmp_path: Path) -> None
     stats = tmp_path / "fuzzer_stats"
     stats.write_text("")
 
-    wait_for_master(stats, cast(ProcessLike, object()))
+    with patch("afl_run.orchestration.INotify") as notifier:
+        wait_for_master(stats, _Process())
+
+    notifier.assert_not_called()
 
 
 def test_wait_for_master_raises_if_process_exits(tmp_path: Path) -> None:
