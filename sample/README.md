@@ -1,37 +1,84 @@
 # AFL Sample
 
-This directory contains a small CMake-based C++ application for local testing.
-The input-processing logic is exposed as `process_input(std::istream&)` in
-`lib.cpp`, which is built as an object library. A fuzz harness can call it
-directly without depending on the command-line file handling in `main`.
+This directory contains a small CMake-based C++ application and an AFL++
+stdin harness. The processing logic is exposed as
+`process_input(std::istream&)` in `lib.cpp`, which is built as an object
+library and reused by both executables.
 
-## Build
+Run the commands below from the repository root.
+
+## 1. Build the regular application
+
+This build is useful for manually checking the file-based application:
 
 ```sh
 cmake -S sample -B sample/build
 cmake --build sample/build
-```
-
-## Run
-
-```sh
 printf 'hello\nworld\n' > sample/input.txt
 sample/build/afl_sample sample/input.txt
 ```
 
-## Fuzz
+Expected output:
 
-The stdin-based harness calls `process_input` directly:
+```text
+lines=2 bytes=10
+```
+
+## 2. Build the instrumented harness
+
+AFL++ requires compile-time instrumentation. Use `afl-c++` instead of the
+system compiler:
+
+```sh
+cmake -S sample -B sample/build-afl -DCMAKE_CXX_COMPILER=afl-c++
+cmake --build sample/build-afl
+```
+
+This produces `sample/build-afl/afl_sample_harness`. The harness reads stdin
+and passes it to `process_input`.
+
+## 3. Create seed input
 
 ```sh
 mkdir -p sample/seeds
 printf 'seed\n' > sample/seeds/initial.txt
-afl-fuzz -i sample/seeds -o sample/out -- sample/build/afl_sample_harness
 ```
 
-The same harness can be launched through `afl-run` with the minimal
-meta-harness configuration:
+## 4. Run AFL++ directly
+
+Use a temporary output directory for a short smoke test:
 
 ```sh
-afl-run sample/meta-harness.json
+timeout --signal=SIGTERM --kill-after=1s 0.3s \
+  afl-fuzz \
+  -i sample/seeds \
+  -o /tmp/afl-sample-fuzz \
+  -- sample/build-afl/afl_sample_harness
 ```
+
+If AFL++ reports that all CPU cores are occupied, disable CPU affinity for
+the smoke test:
+
+```sh
+AFL_NO_AFFINITY=1 timeout --signal=SIGTERM --kill-after=1s 0.3s \
+  afl-fuzz \
+  -i sample/seeds \
+  -o /tmp/afl-sample-fuzz \
+  -- sample/build-afl/afl_sample_harness
+```
+
+## 5. Run through afl-run
+
+`meta-harness.json` is the minimal runner configuration. It only needs the
+main harness, seed directory, and output directory under `paths`; CmpLog
+defaults to the main harness and no dictionary is required.
+
+Run a 0.3-second campaign through the Python CLI:
+
+```sh
+AFL_NO_AFFINITY=1 uv run afl-run --timeout 0.3 sample/meta-harness.json
+```
+
+The runner starts the master and CmpLog AFL++ processes, logs their commands,
+and terminates the campaign and child processes when the timeout expires.
+Generated build, log, and campaign-output directories are ignored by Git.

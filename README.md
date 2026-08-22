@@ -44,6 +44,13 @@ All settings are described by the pydantic models in `src/afl_run/config.py`
 afl-run config.json
 ```
 
+The campaign can be bounded from the command line with a floating-point
+timeout in seconds:
+
+```sh
+afl-run --timeout 3600.5 config.json
+```
+
 All paths must be supplied in the JSON configuration; no paths are derived or
 rewritten. See `config.json` for the configuration layout. Environment
 variables for child `afl-fuzz` processes are key/value pairs under

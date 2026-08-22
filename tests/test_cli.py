@@ -178,3 +178,30 @@ def test_main_handles_campaign_cancellation(tmp_path: Path) -> None:
         result = CliRunner().invoke(main, [str(config_path)])
 
     assert result.exit_code == 0
+
+
+def test_main_handles_campaign_timeout(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}")
+
+    def timeout(campaign: Any) -> None:
+        campaign.close()
+        raise TimeoutError
+
+    with (
+        patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
+        patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
+        patch("afl_run.cli.asyncio.run", side_effect=timeout),
+    ):
+        result = CliRunner().invoke(main, ["--timeout", "1.5", str(config_path)])
+
+    assert result.exit_code == 0
+
+
+def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
+    cfg, paths = _config(tmp_path)
+
+    with patch("afl_run.cli._run_campaign_with_signals", new=AsyncMock()) as campaign:
+        asyncio.run(_run_campaign(cfg, paths, timeout=1.5))
+
+    campaign.assert_awaited_once_with(cfg, paths)

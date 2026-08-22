@@ -24,11 +24,17 @@ from afl_run.paths import PathValidationError, ResolvedPaths, resolve_paths
 LOGGER = logging.getLogger(__name__)
 
 @click.command()
+@click.option(
+    "--timeout",
+    type=click.FloatRange(min=0),
+    default=None,
+    help="Stop the campaign after this many seconds.",
+)
 @click.argument(
     "config_path",
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
-def main(config_path: str) -> None:
+def main(config_path: str, timeout: float | None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = Config.model_validate_json(Path(config_path).read_text())
     try:
@@ -36,12 +42,18 @@ def main(config_path: str) -> None:
     except PathValidationError as error:
         raise click.ClickException(str(error)) from error
     try:
-        asyncio.run(_run_campaign(cfg, resolved))
+        asyncio.run(_run_campaign(cfg, resolved, timeout))
     except asyncio.CancelledError:
         LOGGER.info("campaign interrupted")
+    except TimeoutError:
+        LOGGER.info("campaign timed out")
 
 
-async def _run_campaign(cfg: Config, resolved: ResolvedPaths) -> None:
+async def _run_campaign(
+    cfg: Config,
+    resolved: ResolvedPaths,
+    timeout: float | None = None,
+) -> None:
     loop = asyncio.get_running_loop()
     task = asyncio.current_task()
     assert task is not None
@@ -49,7 +61,11 @@ async def _run_campaign(cfg: Config, resolved: ResolvedPaths) -> None:
         loop.add_signal_handler(signum, task.cancel)
 
     try:
-        await _run_campaign_with_signals(cfg, resolved)
+        campaign = _run_campaign_with_signals(cfg, resolved)
+        if timeout is None:
+            await campaign
+        else:
+            await asyncio.wait_for(campaign, timeout=timeout)
     finally:
         for signum in (signal.SIGTERM, signal.SIGHUP):
             loop.remove_signal_handler(signum)
