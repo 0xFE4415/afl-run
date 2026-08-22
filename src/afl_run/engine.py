@@ -26,6 +26,8 @@ def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ..
         "-x",
         str(paths.dictionary),
     )
+    if config.memory_limit_asan_mb is not None:
+        args = args[:2] + ("-m", str(config.memory_limit_asan_mb)) + args[2:]
     if config.skip_deterministic:
         args += ("-z",)
     return args
@@ -41,11 +43,10 @@ def _build_args(
     args = (
         "-G",
         str(config.max_input_length),
-        "-m",
-        str(config.memory_limit_mb),
-        "-t",
-        str(timeout),
     )
+    if config.memory_limit_mb is not None:
+        args += ("-m", str(config.memory_limit_mb))
+    args += ("-t", str(timeout))
     if include_cmplog:
         args += ("-c", str(paths.cmplog))
     args += ("-x", str(paths.dictionary))

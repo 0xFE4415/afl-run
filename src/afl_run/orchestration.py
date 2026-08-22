@@ -5,18 +5,13 @@ import selectors
 import shutil
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Protocol
 
 from inotify_simple import INotify, flags
 
 from afl_run.config import Config
 from afl_run.engine import build_asan_args, build_common_args, build_common_no_cmplog_args
+from afl_run.launcher import ProcessLike
 from afl_run.paths import ResolvedPaths
-
-
-class ProcessLike(Protocol):
-    @property
-    def pid(self) -> int: ...
 
 
 def build_master_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
@@ -114,7 +109,12 @@ def _build_fuzzer_command(
     )
 
 
-def prepare_shared_memory(root: Path) -> None:
+def reset_output_directory(root: Path) -> None:
+    absolute_root = root.absolute()
+    if absolute_root in {Path("/"), Path.home(), Path.cwd().absolute()}:
+        raise ValueError(f"refusing to remove unsafe output directory: {root}")
+    if root.is_symlink() or (root.exists() and not root.is_dir()):
+        raise ValueError(f"output directory is not a regular directory: {root}")
     if root.exists():
         shutil.rmtree(root)
     root.mkdir(parents=True)
@@ -124,6 +124,7 @@ def wait_for_master(
     stats_path: Path,
     master: ProcessLike,
 ) -> None:
+    stats_path.parent.mkdir(parents=True, exist_ok=True)
     if stats_path.is_file():
         return
 
@@ -148,6 +149,8 @@ def _wait_for_events(stats_path: Path, notifier: INotify, pidfd: int) -> None:
         while True:
             for key, _ in selector.select():
                 if key.data == "process":
+                    if stats_path.is_file():
+                        return
                     raise RuntimeError(f"master exited before creating {stats_path}")
                 notifier.read()
                 if stats_path.is_file():

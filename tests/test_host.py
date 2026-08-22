@@ -8,7 +8,10 @@ from afl_run.host import CORE_PATTERN, RANDOMIZE_VA_SPACE, configure_host
 
 
 def test_configure_host() -> None:
-    with patch("afl_run.host.subprocess.run") as run:
+    with (
+        patch("afl_run.host.Path.read_text", side_effect=["0", "core\n"]),
+        patch("afl_run.host.subprocess.run") as run,
+    ):
         configure_host(HostConfig(randomize_va_space="1", core_pattern="core.%p"))
 
     assert run.call_args_list == [
@@ -27,3 +30,13 @@ def test_configure_host() -> None:
             stdout=subprocess.DEVNULL,
         ),
     ]
+
+
+def test_configure_host_skips_unchanged_values() -> None:
+    with (
+        patch("afl_run.host.Path.read_text", side_effect=["0\n", "core\n"]),
+        patch("afl_run.host.subprocess.run") as run,
+    ):
+        configure_host(HostConfig(randomize_va_space="0", core_pattern="core"))
+
+    run.assert_not_called()

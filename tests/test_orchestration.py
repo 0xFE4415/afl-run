@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,13 +14,14 @@ from afl_run.orchestration import (
     build_cmplog_command,
     build_master_command,
     build_worker_specs,
-    prepare_shared_memory,
+    reset_output_directory,
     wait_for_master,
 )
 
 
 def _config() -> Config:
     return Config(
+        engine={"memory_limit_mb": 1024},
         paths=PathConfig(
             main="main",
             cmplog="cmplog",
@@ -110,23 +114,37 @@ def test_build_worker_specs_pairs_names_with_commands() -> None:
     ]
 
 
-def test_prepare_shared_memory_replaces_existing(tmp_path: Path) -> None:
+def test_reset_output_directory_replaces_existing(tmp_path: Path) -> None:
     root = tmp_path / "afl"
     root.mkdir()
     (root / "old").write_text("")
 
-    prepare_shared_memory(root)
+    reset_output_directory(root)
 
     assert root.is_dir()
     assert not (root / "old").exists()
 
 
-def test_prepare_shared_memory_creates_missing(tmp_path: Path) -> None:
+def test_reset_output_directory_creates_missing(tmp_path: Path) -> None:
     root = tmp_path / "nested" / "afl"
 
-    prepare_shared_memory(root)
+    reset_output_directory(root)
 
     assert root.is_dir()
+
+
+@pytest.mark.parametrize("root", [Path("/"), Path.cwd()])
+def test_reset_output_directory_refuses_unsafe_roots(root: Path) -> None:
+    with pytest.raises(ValueError, match="unsafe"):
+        reset_output_directory(root)
+
+
+def test_reset_output_directory_refuses_non_directory(tmp_path: Path) -> None:
+    root = tmp_path / "output"
+    root.write_text("")
+
+    with pytest.raises(ValueError, match="regular directory"):
+        reset_output_directory(root)
 
 
 class _EventKey:
@@ -135,8 +153,9 @@ class _EventKey:
 
 
 class _Selector:
-    def __init__(self, events: list[str]) -> None:
+    def __init__(self, events: list[str], on_select: Callable[[], None] | None = None) -> None:
         self.events = events
+        self.on_select = on_select
 
     def __enter__(self) -> _Selector:
         return self
@@ -148,6 +167,8 @@ class _Selector:
         return None
 
     def select(self) -> list[tuple[_EventKey, object]]:
+        if self.on_select is not None:
+            self.on_select()
         return [(_EventKey(self.events.pop(0)), object())]
 
 
@@ -195,6 +216,22 @@ def test_wait_for_master_waits_until_stats_exists(tmp_path: Path) -> None:
     assert stats.is_file()
 
 
+def test_wait_for_master_creates_missing_stats_parent(tmp_path: Path) -> None:
+    stats = tmp_path / "main" / "fuzzer_stats"
+    notifier = _Notifier(stats)
+    selector = _Selector(["filesystem", "filesystem"])
+
+    with (
+        patch("afl_run.orchestration.INotify", return_value=notifier),
+        patch("afl_run.orchestration.selectors.DefaultSelector", return_value=selector),
+        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
+        patch("afl_run.orchestration.os.close"),
+    ):
+        wait_for_master(stats, _Process())
+
+    assert stats.is_file()
+
+
 def test_wait_for_master_returns_if_stats_already_exists(tmp_path: Path) -> None:
     stats = tmp_path / "fuzzer_stats"
     stats.write_text("")
@@ -219,6 +256,23 @@ def test_wait_for_master_rechecks_after_installing_watch(tmp_path: Path) -> None
     pidfd_open.assert_not_called()
 
 
+def test_wait_for_master_creates_missing_master_directory(tmp_path: Path) -> None:
+    stats = tmp_path / "main" / "fuzzer_stats"
+    script = (
+        "import sys, time; "
+        "time.sleep(0.1); "
+        "open(sys.argv[1], 'w').close()"
+    )
+    process = subprocess.Popen([sys.executable, "-c", script, str(stats)])
+
+    try:
+        wait_for_master(stats, process)
+    finally:
+        process.wait(timeout=5)
+
+    assert stats.is_file()
+
+
 def test_wait_for_master_raises_if_process_exits(tmp_path: Path) -> None:
     selector = _Selector(["process"])
     with (
@@ -229,3 +283,21 @@ def test_wait_for_master_raises_if_process_exits(tmp_path: Path) -> None:
     ):
         with pytest.raises(RuntimeError):
             wait_for_master(tmp_path / "fuzzer_stats", _Process())
+
+
+def test_wait_for_master_accepts_stats_created_with_process_event(tmp_path: Path) -> None:
+    stats = tmp_path / "main" / "fuzzer_stats"
+    stats.parent.mkdir()
+
+    def create_stats() -> None:
+        stats.write_text("")
+
+    selector = _Selector(["process"], on_select=create_stats)
+
+    with (
+        patch("afl_run.orchestration.INotify"),
+        patch("afl_run.orchestration.selectors.DefaultSelector", return_value=selector),
+        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
+        patch("afl_run.orchestration.os.close"),
+    ):
+        wait_for_master(stats, _Process())

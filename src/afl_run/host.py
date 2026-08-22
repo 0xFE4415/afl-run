@@ -15,6 +15,8 @@ def configure_host(config: HostConfig) -> None:
 
 
 def _write_sysctl(path: Path, value: str) -> None:
+    if path.read_text().strip() == value:
+        return
     subprocess.run(
         ["sudo", "tee", str(path)],
         input=f"{value}\n",

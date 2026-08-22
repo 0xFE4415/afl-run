@@ -117,7 +117,7 @@ def test_fuzzer_group_reports_dead_process() -> None:
 
     async def run() -> None:
         async with FuzzerGroup((fuzzer,)) as group:
-            with pytest.raises(RuntimeError, match="main"):
+            with pytest.raises(RuntimeError, match=r"main.*main\.log"):
                 await group.abort_if_any_died()
 
     asyncio.run(run())

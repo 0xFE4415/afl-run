@@ -80,21 +80,21 @@ def test_missing_required_path(field: str, tmp_path: Path) -> None:
 def test_main_nonexistent(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
     cfg.paths.main = str(tmp_path / "nope" / "afl_harness")
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         resolve_paths(cfg)
 
 
 def test_nonexistent_dictionary(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
     cfg.paths.dictionary = str(tmp_path / "missing.dict")
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         resolve_paths(cfg)
 
 
 def test_nonexistent_seeds(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
     cfg.paths.seeds_dir = str(tmp_path / "missing_seeds")
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         resolve_paths(cfg)
 
 
@@ -108,3 +108,15 @@ def test_cli_main(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     run_campaign.assert_awaited_once()
+
+
+def test_cli_reports_missing_path(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.main = str(tmp_path / "missing" / "afl_harness")
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    result = CliRunner().invoke(main, [str(config_path)])
+
+    assert result.exit_code != 0
+    assert "missing MAIN harness" in result.output

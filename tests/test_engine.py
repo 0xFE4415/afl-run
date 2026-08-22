@@ -13,7 +13,7 @@ from afl_run.engine import (
 
 
 def test_common_args_include_cmplog_and_z() -> None:
-    args = build_common_args(EngineConfig(), relative_paths())
+    args = build_common_args(EngineConfig(memory_limit_mb=1024), relative_paths())
     assert args == (
         "-G",
         "4096",
@@ -34,8 +34,6 @@ def test_common_no_cmplog_can_disable_deterministic_skip() -> None:
     assert build_common_no_cmplog_args(config, relative_paths()) == (
         "-G",
         "4096",
-        "-m",
-        "1024",
         "-t",
         "2500",
         "-x",
@@ -44,10 +42,12 @@ def test_common_no_cmplog_can_disable_deterministic_skip() -> None:
 
 
 def test_asan_args_use_scaled_timeout() -> None:
-    config = EngineConfig(asan_timeout_scale=3)
+    config = EngineConfig(asan_timeout_scale=3, memory_limit_asan_mb=0)
     assert build_asan_args(config, relative_paths()) == (
         "-G",
         "4096",
+        "-m",
+        "0",
         "-t",
         "7500",
         "-x",
@@ -57,10 +57,16 @@ def test_asan_args_use_scaled_timeout() -> None:
 
 
 def test_asan_args_use_explicit_timeout() -> None:
-    config = EngineConfig(timeout_asan_ms=8000, skip_deterministic=False)
+    config = EngineConfig(
+        timeout_asan_ms=8000,
+        memory_limit_asan_mb=512,
+        skip_deterministic=False,
+    )
     assert build_asan_args(config, relative_paths()) == (
         "-G",
         "4096",
+        "-m",
+        "512",
         "-t",
         "8000",
         "-x",
@@ -98,6 +104,7 @@ def test_common_args_reflect_engine_settings(
         str(timeout),
     )
     assert args[6:8] == ("-c", "cmplog")
+    assert args[8:10] == ("-x", "dict")
     assert ("-z" in args) is skip_deterministic
 
 
