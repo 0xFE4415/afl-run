@@ -111,11 +111,17 @@ async def launch_fuzzer(
 
 
 async def _abort_if_any_died(fuzzers: tuple[FuzzerProcess, ...]) -> None:
+    if not fuzzers:
+        return
     tasks = {asyncio.create_task(fuzzer.process.wait()): fuzzer for fuzzer in fuzzers}
     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     for task in pending:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
+    errors = [(tasks[task], task.exception()) for task in done]
+    for fuzzer, error in errors:
+        if error is not None:
+            raise RuntimeError(f"fuzzer {fuzzer.name} wait failed: {error}") from error
     fuzzer = tasks[next(iter(done))]
     raise RuntimeError(
         f"fuzzer {fuzzer.name} exited with code {fuzzer.process.returncode}; "

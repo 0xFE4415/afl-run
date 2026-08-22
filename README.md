@@ -7,7 +7,7 @@ pydantic and supplied as JSON through a Click CLI.
 
 - Python >= 3.13
 - [uv](https://github.com/astral-sh/uv)
-- Linux with AFL++ and built harnesses
+- Linux kernel >= 5.3 with AFL++ and built harnesses
 
 ## Setup
 
@@ -113,3 +113,6 @@ host configuration instead.
 
 When `execution.fresh` is false, existing per-fuzzer logs are appended to so
 that resumed campaigns retain earlier output. Fresh campaigns truncate logs.
+On resume, an existing master `fuzzer_stats` file is treated as readiness for
+the master, so a stale file can hide a master startup failure until the normal
+fuzzer health check runs.

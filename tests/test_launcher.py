@@ -10,6 +10,7 @@ import pytest
 from afl_run.launcher import (
     FuzzerGroup,
     FuzzerProcess,
+    _abort_if_any_died,
     launch_fuzzer,
 )
 
@@ -54,6 +55,20 @@ class _StubbornProcess:
         while self.returncode is None:
             await asyncio.sleep(0)
         return self.returncode
+
+
+class _ErrorProcess:
+    pid = 4
+    returncode = 1
+
+    def terminate(self) -> None:
+        return None
+
+    def kill(self) -> None:
+        return None
+
+    async def wait(self) -> int:
+        raise OSError("wait failed")
 
 
 def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path, caplog) -> None:
@@ -184,6 +199,21 @@ def test_fuzzer_group_reports_dead_process() -> None:
     asyncio.run(run())
     process.wait.assert_awaited()
     log.close.assert_called_once_with()
+
+
+def test_abort_if_any_died_reports_wait_errors() -> None:
+    process = _ErrorProcess()
+    fuzzer = FuzzerProcess("broken", process, Path("broken.log"), MagicMock())
+
+    async def run() -> None:
+        with pytest.raises(RuntimeError, match="wait failed"):
+            await _abort_if_any_died((fuzzer,))
+
+    asyncio.run(run())
+
+
+def test_abort_if_any_died_accepts_empty_group() -> None:
+    asyncio.run(_abort_if_any_died(()))
 
 
 def test_fuzzer_group_cancels_other_waiters() -> None:
