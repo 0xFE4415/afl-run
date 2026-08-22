@@ -53,17 +53,23 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None
     cfg, paths = _config(tmp_path, n_instances=3, optional=True)
     launched: list[str] = []
 
-    async def launch(*args: object, **kwargs: object) -> FuzzerProcess:
-        launched.append(str(args[1]))
-        return _fuzzer(str(args[1]))
+    async def launch(
+        command: tuple[str, ...],
+        name: str,
+        *args: object,
+        **kwargs: object,
+    ) -> FuzzerProcess:
+        launched.append(name)
+        return _fuzzer(name)
 
     with (
         patch("afl_run.cli.configure_host") as configure,
         patch("afl_run.cli.prepare_shared_memory") as prepare,
         patch("afl_run.cli.build_environment", return_value={"PATH": "/bin"}),
-        patch("afl_run.cli.launch_fuzzer", side_effect=launch),
+        patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
         patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()),
-        patch("afl_run.cli.abort_if_any_died", new=AsyncMock()),
+        patch("afl_run.cli.FuzzerGroup.abort_if_any_died", new=AsyncMock()),
+        patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
     ):
         asyncio.run(_run_campaign(cfg, paths))
 
@@ -76,15 +82,21 @@ def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Pa
     cfg, paths = _config(tmp_path)
     cfg.execution.fresh = False
 
-    async def launch(*args: object, **kwargs: object) -> FuzzerProcess:
-        return _fuzzer(str(args[1]))
+    async def launch(
+        command: tuple[str, ...],
+        name: str,
+        *args: object,
+        **kwargs: object,
+    ) -> FuzzerProcess:
+        return _fuzzer(name)
 
     with (
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.build_environment", return_value={}),
-        patch("afl_run.cli.launch_fuzzer", side_effect=launch),
+        patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
         patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()),
-        patch("afl_run.cli.abort_if_any_died", new=AsyncMock()),
+        patch("afl_run.cli.FuzzerGroup.abort_if_any_died", new=AsyncMock()),
+        patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
     ):
         asyncio.run(_run_campaign(cfg, paths))
 
@@ -98,17 +110,20 @@ def test_run_campaign_terminates_started_fuzzers_on_failure(tmp_path: Path) -> N
     with (
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.build_environment", return_value={}),
-        patch("afl_run.cli.launch_fuzzer", new=AsyncMock(return_value=master)),
+        patch("afl_run.cli.FuzzerGroup.launch", new=AsyncMock(return_value=master)),
         patch(
             "afl_run.cli.asyncio.to_thread",
             new=AsyncMock(side_effect=RuntimeError("master failed")),
         ),
-        patch("afl_run.cli.terminate_fuzzers", new=AsyncMock()) as terminate,
+        patch(
+            "afl_run.cli.FuzzerGroup.__aexit__",
+            new=AsyncMock(return_value=False),
+        ) as exit_group,
     ):
         with pytest.raises(RuntimeError, match="master failed"):
             asyncio.run(_run_campaign(cfg, paths))
 
-    terminate.assert_awaited_once_with((master,))
+    exit_group.assert_awaited_once()
 
 
 def test_run_campaign_does_not_cleanup_if_host_setup_fails(tmp_path: Path) -> None:
@@ -116,24 +131,30 @@ def test_run_campaign_does_not_cleanup_if_host_setup_fails(tmp_path: Path) -> No
 
     with (
         patch("afl_run.cli.configure_host", side_effect=OSError("host failed")),
-        patch("afl_run.cli.terminate_fuzzers", new=AsyncMock()) as terminate,
+        patch(
+            "afl_run.cli.FuzzerGroup.__aexit__",
+            new=AsyncMock(return_value=False),
+        ) as exit_group,
     ):
         with pytest.raises(OSError, match="host failed"):
             asyncio.run(_run_campaign(cfg, paths))
 
-    terminate.assert_not_awaited()
+    exit_group.assert_not_awaited()
 
 
-def test_run_campaign_does_not_cleanup_before_process_start(tmp_path: Path) -> None:
+def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path)
 
     with (
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.build_environment", return_value={}),
         patch("afl_run.cli.build_master_command", side_effect=OSError("command failed")),
-        patch("afl_run.cli.terminate_fuzzers", new=AsyncMock()) as terminate,
+        patch(
+            "afl_run.cli.FuzzerGroup.__aexit__",
+            new=AsyncMock(return_value=False),
+        ) as exit_group,
     ):
         with pytest.raises(OSError, match="command failed"):
             asyncio.run(_run_campaign(cfg, paths))
 
-    terminate.assert_not_awaited()
+    exit_group.assert_awaited_once()

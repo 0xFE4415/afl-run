@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from helpers import minimal_path_config
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -8,7 +9,10 @@ from afl_run.environment import build_environment
 
 
 def test_build_environment_preserves_base_and_applies_config() -> None:
-    cfg = Config(env=EnvConfig(variables={"AFL_MAP_SIZE": "123", "CUSTOM": "yes"}))
+    cfg = Config(
+        paths=minimal_path_config(),
+        env=EnvConfig(variables={"AFL_MAP_SIZE": "123", "CUSTOM": "yes"}),
+    )
 
     environment = build_environment(cfg, {"PATH": "/bin", "CUSTOM": "no"})
 
@@ -16,7 +20,7 @@ def test_build_environment_preserves_base_and_applies_config() -> None:
 
 
 def test_build_environment_uses_process_environment() -> None:
-    cfg = Config(env=EnvConfig(variables={"CUSTOM": "yes"}))
+    cfg = Config(paths=minimal_path_config(), env=EnvConfig(variables={"CUSTOM": "yes"}))
 
     environment = build_environment(cfg)
 
@@ -31,7 +35,7 @@ def test_build_environment_merges_arbitrary_mappings(
     base: dict[str, str],
     variables: dict[str, str],
 ) -> None:
-    cfg = Config(env=EnvConfig(variables=variables))
+    cfg = Config(paths=minimal_path_config(), env=EnvConfig(variables=variables))
 
     environment = build_environment(cfg, base)
 

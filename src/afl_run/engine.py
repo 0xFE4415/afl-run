@@ -18,17 +18,17 @@ def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ..
         if config.timeout_asan_ms is not None
         else config.timeout_ms * config.asan_timeout_scale
     )
-    args = [
+    args = (
         "-G",
         str(config.max_input_length),
         "-t",
         str(timeout),
         "-x",
         str(paths.dictionary),
-    ]
+    )
     if config.skip_deterministic:
-        args.append("-z")
-    return tuple(args)
+        args += ("-z",)
+    return args
 
 
 def _build_args(
@@ -38,17 +38,17 @@ def _build_args(
     include_cmplog: bool,
     timeout: int,
 ) -> tuple[str, ...]:
-    args = [
+    args = (
         "-G",
         str(config.max_input_length),
         "-m",
         str(config.memory_limit_mb),
         "-t",
         str(timeout),
-    ]
+    )
     if include_cmplog:
-        args.extend(["-c", str(paths.cmplog)])
-    args.extend(["-x", str(paths.dictionary)])
+        args += ("-c", str(paths.cmplog))
+    args += ("-x", str(paths.dictionary))
     if config.skip_deterministic:
-        args.append("-z")
-    return tuple(args)
+        args += ("-z",)
+    return args
