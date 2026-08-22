@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 
 import click
@@ -25,6 +26,7 @@ from afl_run.paths import PathValidationError, ResolvedPaths, resolve_paths
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
 def main(config_path: str) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     cfg = Config.model_validate_json(Path(config_path).read_text())
     try:
         resolved = resolve_paths(cfg)
