@@ -10,7 +10,7 @@ from typing import Protocol
 from inotify_simple import INotify, flags
 
 from afl_run.config import Config
-from afl_run.engine import build_common_args, build_common_no_cmplog_args
+from afl_run.engine import build_asan_args, build_common_args, build_common_no_cmplog_args
 from afl_run.paths import ResolvedPaths
 
 
@@ -37,6 +37,50 @@ def build_cmplog_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...
         "cmplog",
         paths.cmplog,
     )
+
+
+def build_worker_commands(
+    config: Config,
+    paths: ResolvedPaths,
+) -> tuple[tuple[str, ...], ...]:
+    workers = tuple(
+        _build_fuzzer_command(
+            paths,
+            build_common_no_cmplog_args(config.engine, paths),
+            "-S",
+            f"s{index}",
+            paths.main,
+        )
+        for index in range(1, config.execution.n_instances)
+    )
+    laf = (
+        (
+            _build_fuzzer_command(
+                paths,
+                build_common_no_cmplog_args(config.engine, paths),
+                "-S",
+                "laf",
+                paths.laf,
+            ),
+        )
+        if paths.laf is not None
+        else ()
+    )
+    asan = (
+        tuple(
+            _build_fuzzer_command(
+                paths,
+                build_asan_args(config.engine, paths),
+                "-S",
+                f"asan{index}",
+                paths.asan_main,
+            )
+            for index in range(1, config.engine.asan_instances + 1)
+        )
+        if paths.asan_main is not None
+        else ()
+    )
+    return workers + laf + asan
 
 
 def _build_fuzzer_command(
