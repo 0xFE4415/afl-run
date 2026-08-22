@@ -9,6 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(afl_sample_lib OBJECT lib.cpp)
 
 add_executable(afl_sample main.cpp $<TARGET_OBJECTS:afl_sample_lib>)
+add_executable(afl_sample_harness harness.cpp $<TARGET_OBJECTS:afl_sample_lib>)
 
 target_compile_options(afl_sample PRIVATE
     -Wall
