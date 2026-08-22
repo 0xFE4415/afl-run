@@ -17,11 +17,11 @@ from afl_run.paths import ResolvedPaths
 def _config(
     tmp_path: Path,
     *,
-    n_instances: int = 1,
+    n_workers: int = 0,
     optional: bool = False,
 ) -> tuple[Config, ResolvedPaths]:
     cfg = Config(
-        execution=ExecutionConfig(n_instances=n_instances, fresh=True),
+        execution=ExecutionConfig(n_workers=n_workers, fresh=True),
         paths=PathConfig(
             main="main",
             cmplog="cmplog",
@@ -52,7 +52,7 @@ def _fuzzer(name: str) -> FuzzerProcess:
 
 
 def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None:
-    cfg, paths = _config(tmp_path, n_instances=3, optional=True)
+    cfg, paths = _config(tmp_path, n_workers=3, optional=True)
     launched: list[str] = []
 
     async def launch(
@@ -77,7 +77,7 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None
 
     configure.assert_called_once_with(cfg.host)
     prepare.assert_called_once_with(paths.out_dir)
-    assert launched == ["main", "cmplog", "s1", "s2", "laf", "asan1", "asan2"]
+    assert launched == ["main", "cmplog", "s1", "s2", "s3", "laf", "asan1", "asan2"]
 
 
 def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Path) -> None:

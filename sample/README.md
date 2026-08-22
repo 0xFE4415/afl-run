@@ -82,3 +82,15 @@ AFL_NO_AFFINITY=1 uv run afl-run --timeout 0.3 sample/meta-harness.json
 The runner starts the master and CmpLog AFL++ processes, logs their commands,
 and terminates the campaign and child processes when the timeout expires.
 Generated build, log, and campaign-output directories are ignored by Git.
+
+## 6. Run an advanced campaign
+
+`advanced-config.json` starts one master, one CmpLog instance, one LAF
+instance, and two standard workers (`s1` and `s2`). The sample has only one
+instrumented binary, so its CmpLog and LAF paths intentionally point to the
+same executable. Replace those paths with dedicated CmpLog and LAF builds for
+a production campaign.
+
+```sh
+AFL_NO_AFFINITY=1 uv run afl-run --timeout 3600 sample/advanced-config.json
+```
