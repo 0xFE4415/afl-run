@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from click.testing import CliRunner
@@ -127,6 +128,8 @@ def test_cli_main(tmp_path: Path) -> None:
     config_path = tmp_path / "config.json"
     config_path.write_text(cfg.model_dump_json())
 
-    result = CliRunner().invoke(main, [str(config_path)])
+    with patch("afl_run.cli._run_campaign", new=AsyncMock()) as run_campaign:
+        result = CliRunner().invoke(main, [str(config_path)])
+
     assert result.exit_code == 0
-    assert str(cfg.paths.main) in result.output
+    run_campaign.assert_awaited_once()
