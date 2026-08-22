@@ -3,12 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from helpers import minimal_path_config
 
 from afl_run.config import Config, EngineConfig
 
 
 def test_default_config() -> None:
-    cfg = Config()
+    cfg = Config(paths=minimal_path_config())
     assert cfg.execution.n_instances == 1
     assert cfg.engine.timeout_ms == 2500
     assert cfg.env.variables["AFL_MAP_SIZE"] == "262144"

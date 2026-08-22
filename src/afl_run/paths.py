@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from afl_run.config import Config, PathConfig
+from afl_run.config import Config
 
 
 @dataclass
@@ -18,19 +18,13 @@ class ResolvedPaths:
     log_dir: Path
 
 
-def _require_set(value: str | None, what: str) -> str:
-    if not value:
-        raise SystemExit(f"missing required path in config: {what}")
-    return value
-
-
 def resolve_paths(cfg: Config) -> ResolvedPaths:
-    p: PathConfig = cfg.paths
-    main = Path(_require_set(p.main, "paths.main"))
-    cmplog = Path(_require_set(p.cmplog, "paths.cmplog"))
-    dictionary = Path(_require_set(p.dictionary, "paths.dictionary"))
-    seeds_dir = Path(_require_set(p.seeds_dir, "paths.seeds_dir"))
-    out_dir = Path(_require_set(p.out_dir, "paths.out_dir"))
+    p = cfg.paths
+    main = Path(p.main)
+    cmplog = Path(p.cmplog)
+    dictionary = Path(p.dictionary)
+    seeds_dir = Path(p.seeds_dir)
+    out_dir = Path(p.out_dir)
     laf = Path(p.laf) if p.laf else None
     asan_main = Path(p.asan_main) if p.asan_main else None
     log_dir = Path(cfg.execution.log_dir)

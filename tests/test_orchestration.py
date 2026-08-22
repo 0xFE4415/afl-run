@@ -1,21 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import override
 from unittest.mock import patch
 
 import pytest
+from helpers import relative_paths
 
 from afl_run.config import Config, PathConfig
 from afl_run.orchestration import (
     build_cmplog_command,
     build_master_command,
-    build_worker_commands,
     build_worker_specs,
     prepare_shared_memory,
     wait_for_master,
 )
-from afl_run.paths import ResolvedPaths
 
 
 def _config() -> Config:
@@ -28,23 +26,8 @@ def _config() -> Config:
             out_dir="out",
         )
     )
-
-
-def _paths() -> ResolvedPaths:
-    return ResolvedPaths(
-        main=Path("main"),
-        cmplog=Path("cmplog"),
-        laf=None,
-        asan_main=None,
-        dictionary=Path("dict"),
-        seeds_dir=Path("seeds"),
-        out_dir=Path("out"),
-        log_dir=Path("logs"),
-    )
-
-
 def test_build_master_command() -> None:
-    command = build_master_command(_config(), _paths())
+    command = build_master_command(_config(), relative_paths())
     assert command == (
         "afl-fuzz",
         "-i",
@@ -68,7 +51,7 @@ def test_build_master_command() -> None:
 
 
 def test_build_cmplog_command() -> None:
-    command = build_cmplog_command(_config(), _paths())
+    command = build_cmplog_command(_config(), relative_paths())
     assert command == (
         "afl-fuzz",
         "-i",
@@ -93,17 +76,17 @@ def test_build_cmplog_command() -> None:
     )
 
 
-def test_build_worker_commands() -> None:
+def test_build_worker_specs() -> None:
     config = _config()
     config.execution.n_instances = 3
     config.engine.asan_instances = 2
-    paths = _paths()
+    paths = relative_paths()
     paths.laf = Path("laf")
     paths.asan_main = Path("asan")
 
-    commands = build_worker_commands(config, paths)
+    specs = build_worker_specs(config, paths)
 
-    assert [command[-4:] for command in commands] == [
+    assert [command[-4:] for _, command in specs] == [
         ("-S", "s1", "--", "main"),
         ("-S", "s2", "--", "main"),
         ("-S", "laf", "--", "laf"),
@@ -112,15 +95,10 @@ def test_build_worker_commands() -> None:
     ]
 
 
-def test_build_worker_commands_without_optional_workers() -> None:
-    commands = build_worker_commands(_config(), _paths())
-    assert commands == ()
-
-
 def test_build_worker_specs_pairs_names_with_commands() -> None:
     config = _config()
     config.execution.n_instances = 2
-    paths = _paths()
+    paths = relative_paths()
     paths.laf = Path("laf")
 
     specs = build_worker_specs(config, paths)
@@ -174,11 +152,14 @@ class _Selector:
 
 
 class _Notifier:
-    def __init__(self, stats: Path) -> None:
+    def __init__(self, stats: Path, *, create_on_watch: bool = False) -> None:
         self.stats = stats
+        self.create_on_watch = create_on_watch
         self.reads = 0
 
     def add_watch(self, path: str, mask: object) -> int:
+        if self.create_on_watch:
+            self.stats.write_text("")
         return 1
 
     def fileno(self) -> int:
@@ -191,14 +172,6 @@ class _Notifier:
 
     def close(self) -> None:
         return None
-
-
-class _CreatingNotifier(_Notifier):
-    @override
-    def add_watch(self, path: str, mask: object) -> int:
-        result = super().add_watch(path, mask)
-        self.stats.write_text("")
-        return result
 
 
 class _Process:
@@ -235,7 +208,7 @@ def test_wait_for_master_returns_if_stats_already_exists(tmp_path: Path) -> None
 def test_wait_for_master_rechecks_after_installing_watch(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
-    notifier = _CreatingNotifier(stats)
+    notifier = _Notifier(stats, create_on_watch=True)
 
     with (
         patch("afl_run.orchestration.INotify", return_value=notifier),

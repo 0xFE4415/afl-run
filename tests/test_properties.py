@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from helpers import minimal_path_config
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -14,6 +15,7 @@ from afl_run.config import Config, EngineConfig, ExecutionConfig
 )
 def test_config_roundtrip(n: int, fresh: bool, timeout: int) -> None:
     cfg = Config(
+        paths=minimal_path_config(),
         execution=ExecutionConfig(n_instances=n, fresh=fresh),
         engine=EngineConfig(timeout_ms=timeout),
     )
