@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from helpers import minimal_path_config
 from hypothesis import given
 from hypothesis import strategies as st
 
-from afl_run.config import Config, EngineConfig, ExecutionConfig
+from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
+from afl_run.paths import resolve_paths
 
 
 @given(
@@ -24,6 +27,25 @@ def test_config_roundtrip(n: int, fresh: bool, timeout: int) -> None:
 
 
 @pytest.mark.parametrize("path", ["/no/such/dir/abc123", "/tmp/does-not-exist-xyz"])
-def test_afl_tmpdir_rejects_nonexistent(path: str) -> None:
+def test_afl_tmpdir_rejects_nonexistent(path: str, tmp_path: Path) -> None:
+    main = tmp_path / "main"
+    cmplog = tmp_path / "cmplog"
+    dictionary = tmp_path / "dict"
+    main.write_text("")
+    cmplog.write_text("")
+    dictionary.write_text("")
+    seeds = tmp_path / "seeds"
+    seeds.mkdir()
+    cfg = Config(
+        paths=PathConfig(
+            main=str(main),
+            cmplog=str(cmplog),
+            dictionary=str(dictionary),
+            seeds_dir=str(seeds),
+            out_dir=str(tmp_path / "out"),
+        ),
+        engine=EngineConfig(afl_tmpdir=path),
+    )
+
     with pytest.raises(ValueError):
-        EngineConfig(afl_tmpdir=path)
+        resolve_paths(cfg)

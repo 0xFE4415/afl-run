@@ -21,9 +21,8 @@ def test_afl_tmpdir_none_ok() -> None:
     assert cfg.afl_tmpdir is None
 
 
-def test_afl_tmpdir_missing_raises() -> None:
-    with pytest.raises(ValueError):
-        EngineConfig(afl_tmpdir="/no/such/dir/abc123")
+def test_afl_tmpdir_missing_is_accepted_before_path_resolution() -> None:
+    assert EngineConfig(afl_tmpdir="/no/such/dir/abc123").afl_tmpdir == "/no/such/dir/abc123"
 
 
 @pytest.mark.parametrize(
@@ -32,6 +31,7 @@ def test_afl_tmpdir_missing_raises() -> None:
         "timeout_ms",
         "timeout_asan_ms",
         "memory_limit_mb",
+        "memory_limit_cmplog_mb",
         "memory_limit_asan_mb",
         "max_input_length",
         "asan_instances",
