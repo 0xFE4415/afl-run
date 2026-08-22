@@ -52,7 +52,7 @@ Use a temporary output directory for a short smoke test:
 timeout --signal=SIGTERM --kill-after=1s 0.3s \
   afl-fuzz \
   -i sample/seeds \
-  -o /tmp/afl-sample-fuzz \
+  -o sample/fuzz/direct \
   -- sample/build-afl/afl_sample_harness
 ```
 
@@ -63,7 +63,7 @@ the smoke test:
 AFL_NO_AFFINITY=1 timeout --signal=SIGTERM --kill-after=1s 0.3s \
   afl-fuzz \
   -i sample/seeds \
-  -o /tmp/afl-sample-fuzz \
+  -o sample/fuzz/direct \
   -- sample/build-afl/afl_sample_harness
 ```
 
@@ -83,13 +83,30 @@ The runner starts the main and CmpLog AFL++ processes, logs their commands,
 and terminates the campaign and child processes when the timeout expires.
 Generated build, log, and campaign-output directories are ignored by Git.
 
-## 6. Run an advanced campaign
+## 6. Build advanced AFL++ variants
+
+The advanced configuration uses separately compiled binaries so each AFL++
+mode is active. Build the regular harness, then build dedicated CmpLog, LAF,
+and ASAN variants:
+
+```sh
+cmake -S sample -B sample/build-afl -DCMAKE_CXX_COMPILER=afl-c++
+cmake --build sample/build-afl
+
+AFL_LLVM_CMPLOG=1 cmake -S sample -B sample/build-cmplog -DCMAKE_CXX_COMPILER=afl-c++
+AFL_LLVM_CMPLOG=1 cmake --build sample/build-cmplog
+
+AFL_LLVM_LAF_ALL=1 cmake -S sample -B sample/build-laf -DCMAKE_CXX_COMPILER=afl-c++
+AFL_LLVM_LAF_ALL=1 cmake --build sample/build-laf
+
+AFL_USE_ASAN=1 cmake -S sample -B sample/build-asan -DCMAKE_CXX_COMPILER=afl-c++
+AFL_USE_ASAN=1 cmake --build sample/build-asan
+```
 
 `advanced-config.json` starts one main instance, one CmpLog instance, one LAF
-instance, one ASAN instance, and two standard workers (`s1` and `s2`). The
-sample has only one instrumented binary, so its CmpLog, LAF, and ASAN paths
-intentionally point to the same executable. Replace those paths with
-dedicated builds for a production campaign.
+instance, one ASAN instance, and two standard workers (`s1` and `s2`).
+
+## 7. Run an advanced campaign
 
 ```sh
 AFL_NO_AFFINITY=1 uv run afl-run --fresh --timeout 3600 sample/advanced-config.json

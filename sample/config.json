@@ -1,11 +1,11 @@
 {
   "execution": {
     "n_workers": 0,
-    "log_dir": "sample/logs"
+    "log_dir": "sample/fuzz/logs"
   },
   "paths": {
     "main": "sample/build-afl/afl_sample_harness",
     "seeds_dir": "sample/seeds",
-    "out_dir": "sample/out"
+    "out_dir": "sample/fuzz/out"
   }
 }
