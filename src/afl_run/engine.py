@@ -25,16 +25,11 @@ def build_common_no_cmplog_args(config: EngineConfig, paths: ResolvedPaths) -> t
 
 
 def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
-    timeout = (
-        config.timeout_asan_ms
-        if config.timeout_asan_ms is not None
-        else config.timeout_ms * config.asan_timeout_scale
-    )
     return _build_args(
         config,
         paths,
         include_cmplog=False,
-        timeout=timeout,
+        timeout=config.timeout_ms * config.asan_timeout_scale,
         memory_limit=config.memory_limit_asan_mb,
     )
 

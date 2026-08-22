@@ -90,12 +90,11 @@ Example:
   },
   "engine": {
     "timeout_ms": 2500,
-    "timeout_asan_ms": null,
     "memory_limit_mb": 1024,
     "memory_limit_cmplog_mb": null,
     "memory_limit_asan_mb": 0,
     "max_input_length": 4096,
-    "skip_deterministic": true,
+    "skip_deterministic": false,
     "asan_instances": 2,
     "asan_timeout_scale": 2,
     "afl_tmpdir": null,
@@ -117,6 +116,9 @@ Example:
 `memory_limit_cmplog_mb` is independent from `memory_limit_mb` and defaults to
 unlimited (`null`). This is recommended because CmpLog can map substantially
 more memory; set it explicitly if the campaign requires a limit.
+
+Set `engine.skip_deterministic` to `true` to pass AFL++'s `-z` option. It is
+disabled by default for compatibility with older AFL++ releases.
 
 ### Host Configuration
 

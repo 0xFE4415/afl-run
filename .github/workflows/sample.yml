@@ -23,10 +23,18 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.13"
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/apt/archives
+          key: apt-${{ runner.os }}-aflpp-v1
       - name: Install AFL++
         run: |
+          mkdir -p "$HOME/.cache/apt/archives"
           sudo apt-get update
-          sudo apt-get install -y afl++
+          sudo apt-get \
+            -o Dir::Cache::archives="$HOME/.cache/apt/archives" \
+            install -y afl++
       - name: Build instrumented harness
         run: |
           cmake -S sample -B sample/build-afl -DCMAKE_CXX_COMPILER=afl-c++
@@ -36,8 +44,15 @@ jobs:
           AFL_NO_AFFINITY: "1"
           AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
         run: |
-          uv run afl-run --fresh --timeout 10 sample/config.json
+          uv run afl-run --fresh --timeout 5 sample/config.json
       - name: Verify campaign output
         run: |
-          test -f sample/fuzz/out/main/fuzzer_stats
+          if ! test -f sample/fuzz/out/main/fuzzer_stats; then
+            echo "AFL++ did not create fuzzer_stats"
+            echo "sample/fuzz contents:"
+            find sample/fuzz -maxdepth 4 -print
+            echo "main.log files:"
+            find . -type f -name main.log -print -exec cat {} \;
+            exit 1
+          fi
           ls sample/fuzz/out/main
