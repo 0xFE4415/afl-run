@@ -258,6 +258,21 @@ def test_main_reports_campaign_runtime_error(tmp_path: Path) -> None:
     assert "Error: campaign failed" in result.output
 
 
+def test_main_reports_campaign_os_error(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}")
+
+    with (
+        patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
+        patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
+        patch("afl_run.cli.asyncio.run", side_effect=OSError("disk full")),
+    ):
+        result = CliRunner().invoke(main, [str(config_path)])
+
+    assert result.exit_code == 1
+    assert "Error: disk full" in result.output
+
+
 def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path)
 

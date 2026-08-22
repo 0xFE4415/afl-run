@@ -211,23 +211,6 @@ class _Process:
 
 def test_wait_for_master_waits_until_stats_exists(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
-    stats.parent.mkdir()
-    notifier = _Notifier(stats)
-    selector = _Selector(["filesystem", "filesystem"])
-
-    with (
-        patch("afl_run.orchestration.INotify", return_value=notifier),
-        patch("afl_run.orchestration.selectors.DefaultSelector", return_value=selector),
-        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
-        patch("afl_run.orchestration.os.close"),
-    ):
-        wait_for_master(stats, _Process())
-
-    assert stats.is_file()
-
-
-def test_wait_for_master_creates_missing_stats_parent(tmp_path: Path) -> None:
-    stats = tmp_path / "main" / "fuzzer_stats"
     notifier = _Notifier(stats)
     selector = _Selector(["filesystem", "filesystem"])
 

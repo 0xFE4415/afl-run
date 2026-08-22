@@ -124,6 +124,15 @@ def test_nonexistent_optional_harness(field: str, message: str, tmp_path: Path) 
         resolve_paths(cfg)
 
 
+def test_out_dir_rejected_when_existing_file(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    out_file = _file(tmp_path / "outfile")
+    cfg.paths.out_dir = str(out_file)
+
+    with pytest.raises(ValueError, match="out_dir"):
+        resolve_paths(cfg)
+
+
 def test_nonexistent_afl_tmpdir(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
     cfg.engine.afl_tmpdir = str(tmp_path / "missing-tmp")
@@ -154,6 +163,19 @@ def test_cli_reports_missing_path(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "missing MAIN harness" in result.output
+
+
+def test_cli_reports_out_dir_not_a_directory(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    out_file = _file(tmp_path / "outfile")
+    cfg.paths.out_dir = str(out_file)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    result = CliRunner().invoke(main, [str(config_path)])
+
+    assert result.exit_code != 0
+    assert "out_dir is not a directory" in result.output
 
 
 def test_cli_reports_overlapping_output_directory(tmp_path: Path) -> None:

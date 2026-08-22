@@ -67,3 +67,26 @@ def test_configure_host_aborts_without_passwordless_sudo() -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+
+def test_configure_host_aborts_when_sudo_is_missing() -> None:
+    with (
+        patch("afl_run.host.Path.read_text", side_effect=["1\n", "core\n"]),
+        patch("afl_run.host.subprocess.run", side_effect=FileNotFoundError("sudo")),
+    ):
+        with pytest.raises(RuntimeError, match="passwordless sudo"):
+            configure_host(HostConfig(randomize_va_space="0", core_pattern="core"))
+
+
+def test_configure_host_reports_write_failure() -> None:
+    def run_effect(command: list[str], **kwargs: object) -> None:
+        if command[1] == "-n":
+            return None
+        raise subprocess.CalledProcessError(1, command)
+
+    with (
+        patch("afl_run.host.Path.read_text", side_effect=["1\n", "core\n"]),
+        patch("afl_run.host.subprocess.run", side_effect=run_effect),
+    ):
+        with pytest.raises(RuntimeError, match="failed to write"):
+            configure_host(HostConfig(randomize_va_space="0", core_pattern="core"))
