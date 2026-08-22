@@ -138,3 +138,22 @@ def test_asan_args_scale_timeout(timeout: int, scale: int) -> None:
     args = build_asan_args(config, relative_paths())
 
     assert args[2:4] == ("-t", str(timeout * scale))
+
+
+@given(
+    timeout=st.integers(min_value=0, max_value=1_000_000),
+    scale=st.integers(min_value=0, max_value=100),
+    explicit=st.integers(min_value=0, max_value=1_000_000),
+)
+def test_asan_args_explicit_timeout_overrides_scale(
+    timeout: int, scale: int, explicit: int
+) -> None:
+    config = EngineConfig(
+        timeout_ms=timeout,
+        asan_timeout_scale=scale,
+        timeout_asan_ms=explicit,
+    )
+
+    args = build_asan_args(config, relative_paths())
+
+    assert args[2:4] == ("-t", str(explicit))

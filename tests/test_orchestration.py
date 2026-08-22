@@ -8,8 +8,10 @@ from unittest.mock import patch
 
 import pytest
 from helpers import relative_paths
+from hypothesis import given
+from hypothesis import strategies as st
 
-from afl_run.config import Config, PathConfig
+from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
 from afl_run.orchestration import (
     build_cmplog_command,
     build_master_command,
@@ -122,6 +124,48 @@ def test_build_worker_specs_pairs_names_with_commands() -> None:
         ("-S", "s1", "--", "main"),
         ("-S", "laf", "--", "laf"),
     ]
+
+
+@given(
+    n_workers=st.integers(min_value=0, max_value=24),
+    asan_instances=st.integers(min_value=0, max_value=12),
+    with_laf=st.booleans(),
+    with_asan=st.booleans(),
+)
+def test_build_worker_specs_matches_configured_instances(
+    n_workers: int,
+    asan_instances: int,
+    with_laf: bool,
+    with_asan: bool,
+) -> None:
+    laf_path = Path("laf") if with_laf else None
+    asan_path = Path("asan") if with_asan else None
+    config = Config(
+        execution=ExecutionConfig(n_workers=n_workers),
+        engine=EngineConfig(asan_instances=asan_instances),
+        paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out"),
+    )
+    paths = relative_paths()
+    paths.laf = laf_path
+    paths.asan_main = asan_path
+
+    specs = build_worker_specs(config, paths)
+
+    expected_names = [f"s{index}" for index in range(1, n_workers + 1)]
+    expected_targets: list[Path] = [paths.main] * n_workers
+    if laf_path is not None:
+        expected_names.append("laf")
+        expected_targets.append(laf_path)
+    if asan_path is not None:
+        expected_names.extend(f"asan{index}" for index in range(1, asan_instances + 1))
+        expected_targets.extend([asan_path] * asan_instances)
+
+    assert [name for name, _ in specs] == expected_names
+    assert len(specs) == len(set(expected_names))
+    for (name, command), target in zip(specs, expected_targets, strict=True):
+        assert command[:5] == ("afl-fuzz", "-i", "seeds", "-o", "out")
+        assert command[command.index("-S") + 1] == name
+        assert command[-2:] == ("--", str(target))
 
 
 def test_reset_output_directory_replaces_existing(tmp_path: Path) -> None:
