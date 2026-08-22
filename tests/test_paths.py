@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from click.testing import CliRunner
+
+from afl_run.cli import main
+from afl_run.config import Config, PathConfig
+from afl_run.paths import ResolvedPaths, resolve_paths
+
+
+def _harness(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("")
+    path.chmod(0o755)
+    return path
+
+
+def _file(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("")
+    return path
+
+
+def _dir(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _valid_config(tmp_path: Path) -> Config:
+    return Config(
+        paths=PathConfig(
+            main=str(_harness(tmp_path / "build-afl" / "afl_harness")),
+            cmplog=str(_harness(tmp_path / "build-afl-cmp" / "afl_harness")),
+            laf=str(_harness(tmp_path / "build-afl-laf" / "afl_harness")),
+            asan_main=str(_harness(tmp_path / "build-asan" / "afl_harness")),
+            dictionary=str(_file(tmp_path / "x86.dict")),
+            seeds_dir=str(_dir(tmp_path / "seeds")),
+            out_dir=str(_dir(tmp_path / "out")),
+        )
+    )
+
+
+def test_resolve_all_provided(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    resolved = resolve_paths(cfg)
+
+    assert isinstance(resolved, ResolvedPaths)
+    assert resolved.main == tmp_path / "build-afl" / "afl_harness"
+    assert resolved.cmplog == tmp_path / "build-afl-cmp" / "afl_harness"
+    assert resolved.laf == tmp_path / "build-afl-laf" / "afl_harness"
+    assert resolved.asan_main == tmp_path / "build-asan" / "afl_harness"
+    assert resolved.dictionary == tmp_path / "x86.dict"
+    assert resolved.seeds_dir == tmp_path / "seeds"
+    assert resolved.out_dir == tmp_path / "out"
+    assert resolved.log_dir == Path("logs")
+
+
+def test_optional_laf_asan_absent(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.laf = None
+    cfg.paths.asan_main = None
+    resolved = resolve_paths(cfg)
+    assert resolved.laf is None
+    assert resolved.asan_main is None
+
+
+def test_missing_required_main(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.main = None
+    with pytest.raises(SystemExit):
+        resolve_paths(cfg)
+
+
+def test_missing_required_cmplog(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.cmplog = None
+    with pytest.raises(SystemExit):
+        resolve_paths(cfg)
+
+
+def test_missing_required_dictionary(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.dictionary = None
+    with pytest.raises(SystemExit):
+        resolve_paths(cfg)
+
+
+def test_missing_required_seeds(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.seeds_dir = None
+    with pytest.raises(SystemExit):
+        resolve_paths(cfg)
+
+
+def test_missing_required_out(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.out_dir = None
+    with pytest.raises(SystemExit):
+        resolve_paths(cfg)
+
+
+def test_main_nonexistent(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.main = str(tmp_path / "nope" / "afl_harness")
+    with pytest.raises(SystemExit):
+        resolve_paths(cfg)
+
+
+def test_nonexistent_dictionary(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.dictionary = str(tmp_path / "missing.dict")
+    with pytest.raises(SystemExit):
+        resolve_paths(cfg)
+
+
+def test_nonexistent_seeds(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.seeds_dir = str(tmp_path / "missing_seeds")
+    with pytest.raises(SystemExit):
+        resolve_paths(cfg)
+
+
+def test_cli_main(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    result = CliRunner().invoke(main, [str(config_path)])
+    assert result.exit_code == 0
+    assert str(cfg.paths.main) in result.output

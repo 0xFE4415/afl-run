@@ -5,13 +5,13 @@
     "log_dir": "logs"
   },
   "paths": {
-    "main": null,
-    "cmplog": null,
-    "laf": null,
-    "asan_main": null,
-    "dictionary": null,
-    "seeds_dir": null,
-    "out_dir": null
+    "main": "/home/user/afl/build-afl/afl_harness",
+    "cmplog": "/home/user/afl/build-afl-cmp/afl_harness",
+    "laf": "/home/user/afl/build-afl-laf/afl_harness",
+    "asan_main": "/home/user/afl/build-asan/afl_harness",
+    "dictionary": "/home/user/afl/x86.dict",
+    "seeds_dir": "/home/user/afl/seeds",
+    "out_dir": "/home/user/afl/out"
   },
   "engine": {
     "timeout_ms": 2500,
