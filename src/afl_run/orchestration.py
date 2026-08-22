@@ -20,30 +20,25 @@ class ProcessLike(Protocol):
 
 
 def build_master_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
-    return _build_fuzzer_command(
+    return _build_standard_command(
+        config,
         paths,
-        build_common_no_cmplog_args(config.engine, paths),
         "-M",
         "main",
         paths.main,
+        include_cmplog=False,
     )
 
 
 def build_cmplog_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
-    return _build_fuzzer_command(
+    return _build_standard_command(
+        config,
         paths,
-        build_common_args(config.engine, paths),
         "-S",
         "cmplog",
         paths.cmplog,
+        include_cmplog=True,
     )
-
-
-def build_worker_commands(
-    config: Config,
-    paths: ResolvedPaths,
-) -> tuple[tuple[str, ...], ...]:
-    return tuple(command for _, command in build_worker_specs(config, paths))
 
 
 def build_worker_specs(
@@ -79,6 +74,23 @@ def build_worker_specs(
                 )
             )
     return tuple(specs)
+
+
+def _build_standard_command(
+    config: Config,
+    paths: ResolvedPaths,
+    instance_flag: str,
+    instance_name: str,
+    target: Path,
+    *,
+    include_cmplog: bool,
+) -> tuple[str, ...]:
+    args = (
+        build_common_args(config.engine, paths)
+        if include_cmplog
+        else build_common_no_cmplog_args(config.engine, paths)
+    )
+    return _build_fuzzer_command(paths, args, instance_flag, instance_name, target)
 
 
 def _build_fuzzer_command(

@@ -106,14 +106,16 @@ def test_wait_for_fuzzers_waits_and_closes_logs() -> None:
     log.close.assert_called_once_with()
 
 
-def test_abort_if_any_died_terminates_all() -> None:
+def test_abort_if_any_died_reports_dead_process() -> None:
     log = MagicMock()
-    fuzzer = FuzzerProcess("main", _process(returncode=1), Path("main.log"), log)
+    process = _process(returncode=1)
+    fuzzer = FuzzerProcess("main", process, Path("main.log"), log)
 
     with pytest.raises(RuntimeError, match="main"):
         asyncio.run(abort_if_any_died((fuzzer,)))
 
-    log.close.assert_called_once_with()
+    process.wait.assert_awaited_once()
+    log.close.assert_not_called()
 
 
 def test_abort_if_any_died_cancels_other_waiters() -> None:
@@ -124,4 +126,4 @@ def test_abort_if_any_died_cancels_other_waiters() -> None:
     with pytest.raises(RuntimeError):
         asyncio.run(abort_if_any_died((first, pending)))
 
-    assert pending_process.calls == 2
+    assert pending_process.calls == 1

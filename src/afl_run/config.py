@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -12,13 +12,13 @@ class ExecutionConfig(BaseModel):
 
 
 class PathConfig(BaseModel):
-    main: str | None = None
-    cmplog: str | None = None
+    main: str
+    cmplog: str
     laf: str | None = None
     asan_main: str | None = None
-    dictionary: str | None = None
-    seeds_dir: str | None = None
-    out_dir: str | None = None
+    dictionary: str
+    seeds_dir: str
+    out_dir: str
 
 
 class EngineConfig(BaseModel):
@@ -34,7 +34,7 @@ class EngineConfig(BaseModel):
     @field_validator("afl_tmpdir")
     @classmethod
     def _check_tmpdir(cls, v: str | None) -> str | None:
-        if v is not None and not os.path.isdir(v):
+        if v is not None and not Path(v).is_dir():
             raise ValueError(f"afl_tmpdir does not exist: {v}")
         return v
 

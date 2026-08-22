@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from click.testing import CliRunner
+from pydantic import ValidationError
 
 from afl_run.cli import main
 from afl_run.config import Config, PathConfig
@@ -67,39 +68,13 @@ def test_optional_laf_asan_absent(tmp_path: Path) -> None:
     assert resolved.asan_main is None
 
 
-def test_missing_required_main(tmp_path: Path) -> None:
+@pytest.mark.parametrize("field", ["main", "cmplog", "dictionary", "seeds_dir", "out_dir"])
+def test_missing_required_path(field: str, tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
-    cfg.paths.main = None
-    with pytest.raises(SystemExit):
-        resolve_paths(cfg)
-
-
-def test_missing_required_cmplog(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.cmplog = None
-    with pytest.raises(SystemExit):
-        resolve_paths(cfg)
-
-
-def test_missing_required_dictionary(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.dictionary = None
-    with pytest.raises(SystemExit):
-        resolve_paths(cfg)
-
-
-def test_missing_required_seeds(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.seeds_dir = None
-    with pytest.raises(SystemExit):
-        resolve_paths(cfg)
-
-
-def test_missing_required_out(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.out_dir = None
-    with pytest.raises(SystemExit):
-        resolve_paths(cfg)
+    values = cfg.paths.model_dump()
+    values[field] = None
+    with pytest.raises(ValidationError):
+        PathConfig.model_validate(values)
 
 
 def test_main_nonexistent(tmp_path: Path) -> None:

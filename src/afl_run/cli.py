@@ -32,35 +32,32 @@ def main(config_path: str) -> None:
 
 async def _run_campaign(cfg: Config, resolved: ResolvedPaths) -> None:
     configure_host(cfg.host)
-    paths = resolved
     tmp_root = Path(cfg.engine.afl_tmpdir) if cfg.engine.afl_tmpdir is not None else None
     if cfg.execution.fresh:
-        prepare_shared_memory(paths.out_dir)
+        prepare_shared_memory(resolved.out_dir)
     else:
-        paths.out_dir.mkdir(parents=True, exist_ok=True)
+        resolved.out_dir.mkdir(parents=True, exist_ok=True)
 
     environment = build_environment(cfg)
     fuzzers: list[FuzzerProcess] = []
 
     async def launch(command: tuple[str, ...], name: str) -> FuzzerProcess:
-        fuzzer = await launch_fuzzer(command, name, paths.log_dir, environment, tmp_root)
+        fuzzer = await launch_fuzzer(command, name, resolved.log_dir, environment, tmp_root)
         fuzzers.append(fuzzer)
         return fuzzer
 
     try:
-        master = await launch(build_master_command(cfg, paths), "main")
+        master = await launch(build_master_command(cfg, resolved), "main")
         await asyncio.to_thread(
             wait_for_master,
-            paths.out_dir / "main" / "fuzzer_stats",
+            resolved.out_dir / "main" / "fuzzer_stats",
             master.process,
         )
 
-        await launch(build_cmplog_command(cfg, paths), "cmplog")
-        for name, command in build_worker_specs(cfg, paths):
+        await launch(build_cmplog_command(cfg, resolved), "cmplog")
+        for name, command in build_worker_specs(cfg, resolved):
             await launch(command, name)
 
         await abort_if_any_died(tuple(fuzzers))
-    except BaseException:
-        if fuzzers:
-            await terminate_fuzzers(tuple(fuzzers))
-        raise
+    finally:
+        await terminate_fuzzers(tuple(fuzzers))

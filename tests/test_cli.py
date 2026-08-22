@@ -124,7 +124,7 @@ def test_run_campaign_does_not_cleanup_if_host_setup_fails(tmp_path: Path) -> No
     terminate.assert_not_awaited()
 
 
-def test_run_campaign_does_not_cleanup_before_process_start(tmp_path: Path) -> None:
+def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path)
 
     with (
@@ -136,4 +136,4 @@ def test_run_campaign_does_not_cleanup_before_process_start(tmp_path: Path) -> N
         with pytest.raises(OSError, match="command failed"):
             asyncio.run(_run_campaign(cfg, paths))
 
-    terminate.assert_not_awaited()
+    terminate.assert_awaited_once_with(())

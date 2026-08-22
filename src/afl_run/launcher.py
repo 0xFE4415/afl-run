@@ -68,7 +68,6 @@ async def abort_if_any_died(fuzzers: tuple[FuzzerProcess, ...]) -> None:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
     fuzzer = tasks[next(iter(done))]
-    await terminate_fuzzers(fuzzers)
     raise RuntimeError(f"fuzzer {fuzzer.name} exited with code {fuzzer.process.returncode}")
 
 
