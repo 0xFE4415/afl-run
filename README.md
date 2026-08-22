@@ -48,3 +48,44 @@ All paths must be supplied in the JSON configuration; no paths are derived or
 rewritten. See `config.json` for the configuration layout. Environment
 variables for child `afl-fuzz` processes are key/value pairs under
 `env.variables`.
+
+Example:
+
+```json
+{
+  "execution": {
+    "n_instances": 4,
+    "fresh": false,
+    "log_dir": "logs"
+  },
+  "paths": {
+    "main": "build-afl/afl_harness",
+    "cmplog": "build-afl-cmp/afl_harness",
+    "laf": "build-afl-laf/afl_harness",
+    "asan_main": "build-asan/afl_harness",
+    "dictionary": "x86.dict",
+    "seeds_dir": "seeds",
+    "out_dir": "out"
+  },
+  "engine": {
+    "timeout_ms": 2500,
+    "timeout_asan_ms": null,
+    "memory_limit_mb": 1024,
+    "globals": 4096,
+    "skip_deterministic": true,
+    "asan_instances": 2,
+    "asan_timeout_scale": 2,
+    "afl_tmpdir": null
+  },
+  "env": {
+    "variables": {
+      "SLEIGHHOME": "ghidra",
+      "AFL_MAP_SIZE": "262144"
+    }
+  },
+  "host": {
+    "randomize_va_space": "0",
+    "core_pattern": "core"
+  }
+}
+```
