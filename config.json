@@ -1,0 +1,36 @@
+{
+  "execution": {
+    "n_instances": 1,
+    "fresh": false,
+    "log_dir": "logs"
+  },
+  "paths": {
+    "main": null,
+    "cmplog": null,
+    "laf": null,
+    "asan_main": null,
+    "dictionary": null,
+    "seeds_dir": null,
+    "out_dir": null
+  },
+  "engine": {
+    "timeout_ms": 2500,
+    "timeout_asan_ms": null,
+    "memory_limit_mb": 1024,
+    "globals": 4096,
+    "skip_deterministic": true,
+    "asan_instances": 2,
+    "asan_timeout_scale": 2,
+    "afl_tmpdir": null
+  },
+  "env": {
+    "variables": {
+      "SLEIGHHOME": "/home/user/ghidra",
+      "AFL_MAP_SIZE": "262144",
+      "AFL_NO_AUTODICT": "1",
+      "AFL_FORKSRV_INIT_TMOUT": "60000",
+      "AFL_AUTORESUME": "1",
+      "ASAN_OPTIONS": "detect_leaks=0:abort_on_error=1:symbolize=0:fast_unwind_on_malloc=1:malloc_context_size=0"
+    }
+  }
+}
