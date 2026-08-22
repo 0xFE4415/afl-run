@@ -6,6 +6,8 @@ on:
     paths:
       - .github/workflows/sample.yml
       - sample/**
+      - src/**
+      - pyproject.toml
 
 concurrency:
   group: sample-${{ github.ref }}
