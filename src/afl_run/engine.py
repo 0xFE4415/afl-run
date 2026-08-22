@@ -5,11 +5,33 @@ from afl_run.paths import ResolvedPaths
 
 
 def build_common_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
-    return _build_args(config, paths, include_cmplog=True, timeout=config.timeout_ms)
+    return _build_args(
+        config,
+        paths,
+        include_cmplog=True,
+        timeout=config.timeout_ms,
+        memory_limit=config.memory_limit_mb,
+    )
+
+
+def build_cmplog_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
+    return _build_args(
+        config,
+        paths,
+        include_cmplog=True,
+        timeout=config.timeout_ms,
+        memory_limit=config.memory_limit_cmplog_mb,
+    )
 
 
 def build_common_no_cmplog_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
-    return _build_args(config, paths, include_cmplog=False, timeout=config.timeout_ms)
+    return _build_args(
+        config,
+        paths,
+        include_cmplog=False,
+        timeout=config.timeout_ms,
+        memory_limit=config.memory_limit_mb,
+    )
 
 
 def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
@@ -18,19 +40,13 @@ def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ..
         if config.timeout_asan_ms is not None
         else config.timeout_ms * config.asan_timeout_scale
     )
-    args = (
-        "-G",
-        str(config.max_input_length),
-        "-t",
-        str(timeout),
-        "-x",
-        str(paths.dictionary),
+    return _build_args(
+        config,
+        paths,
+        include_cmplog=False,
+        timeout=timeout,
+        memory_limit=config.memory_limit_asan_mb,
     )
-    if config.memory_limit_asan_mb is not None:
-        args = args[:2] + ("-m", str(config.memory_limit_asan_mb)) + args[2:]
-    if config.skip_deterministic:
-        args += ("-z",)
-    return args
 
 
 def _build_args(
@@ -39,13 +55,14 @@ def _build_args(
     *,
     include_cmplog: bool,
     timeout: int,
+    memory_limit: int | None,
 ) -> tuple[str, ...]:
     args = (
         "-G",
         str(config.max_input_length),
     )
-    if config.memory_limit_mb is not None:
-        args += ("-m", str(config.memory_limit_mb))
+    if memory_limit is not None:
+        args += ("-m", str(memory_limit))
     args += ("-t", str(timeout))
     if include_cmplog:
         args += ("-c", str(paths.cmplog))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -36,8 +37,9 @@ class _PendingProcess:
         return None
 
 
-def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path) -> None:
+def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path, caplog) -> None:
     process = _process(pid=42)
+    caplog.set_level(logging.INFO, logger="afl_run.launcher")
 
     async def run() -> FuzzerProcess:
         with patch(
@@ -60,6 +62,7 @@ def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path) -> None:
     result = asyncio.run(run())
     assert result.pid == 42
     assert result.log_path == tmp_path / "logs" / "main.log"
+    assert "starting main: afl-fuzz" in caplog.text
     result.log_file.close()
 
 

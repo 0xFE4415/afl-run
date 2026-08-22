@@ -21,7 +21,7 @@ from afl_run.orchestration import (
 
 def _config() -> Config:
     return Config(
-        engine={"memory_limit_mb": 1024},
+        engine={"memory_limit_mb": 1024, "memory_limit_cmplog_mb": 2048},
         paths=PathConfig(
             main="main",
             cmplog="cmplog",
@@ -30,6 +30,8 @@ def _config() -> Config:
             out_dir="out",
         )
     )
+
+
 def test_build_master_command() -> None:
     command = build_master_command(_config(), relative_paths())
     assert command == (
@@ -65,7 +67,7 @@ def test_build_cmplog_command() -> None:
         "-G",
         "4096",
         "-m",
-        "1024",
+        "2048",
         "-t",
         "2500",
         "-c",
@@ -76,7 +78,7 @@ def test_build_cmplog_command() -> None:
         "-S",
         "cmplog",
         "--",
-        "cmplog",
+        "main",
     )
 
 
