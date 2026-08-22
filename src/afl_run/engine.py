@@ -4,15 +4,15 @@ from afl_run.config import EngineConfig
 from afl_run.paths import ResolvedPaths
 
 
-def build_common_args(config: EngineConfig, paths: ResolvedPaths) -> list[str]:
+def build_common_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
     return _build_args(config, paths, include_cmplog=True, timeout=config.timeout_ms)
 
 
-def build_common_no_cmplog_args(config: EngineConfig, paths: ResolvedPaths) -> list[str]:
+def build_common_no_cmplog_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
     return _build_args(config, paths, include_cmplog=False, timeout=config.timeout_ms)
 
 
-def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> list[str]:
+def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
     timeout = (
         config.timeout_asan_ms
         if config.timeout_asan_ms is not None
@@ -21,7 +21,7 @@ def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> list[str]:
     args = ["-G", str(config.globals), "-t", str(timeout), "-x", str(paths.dictionary)]
     if config.skip_deterministic:
         args.append("-z")
-    return args
+    return tuple(args)
 
 
 def _build_args(
@@ -30,7 +30,7 @@ def _build_args(
     *,
     include_cmplog: bool,
     timeout: int,
-) -> list[str]:
+) -> tuple[str, ...]:
     args = [
         "-G",
         str(config.globals),
@@ -44,4 +44,4 @@ def _build_args(
     args.extend(["-x", str(paths.dictionary)])
     if config.skip_deterministic:
         args.append("-z")
-    return args
+    return tuple(args)
