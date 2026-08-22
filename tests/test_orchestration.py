@@ -11,6 +11,7 @@ from afl_run.orchestration import (
     build_cmplog_command,
     build_master_command,
     build_worker_commands,
+    build_worker_specs,
     prepare_shared_memory,
     wait_for_master,
 )
@@ -114,6 +115,21 @@ def test_build_worker_commands() -> None:
 def test_build_worker_commands_without_optional_workers() -> None:
     commands = build_worker_commands(_config(), _paths())
     assert commands == ()
+
+
+def test_build_worker_specs_pairs_names_with_commands() -> None:
+    config = _config()
+    config.execution.n_instances = 2
+    paths = _paths()
+    paths.laf = Path("laf")
+
+    specs = build_worker_specs(config, paths)
+
+    assert [name for name, _ in specs] == ["s1", "laf"]
+    assert [command[-4:] for _, command in specs] == [
+        ("-S", "s1", "--", "main"),
+        ("-S", "laf", "--", "laf"),
+    ]
 
 
 def test_prepare_shared_memory_replaces_existing(tmp_path: Path) -> None:

@@ -83,6 +83,22 @@ def build_worker_commands(
     return workers + laf + asan
 
 
+def build_worker_specs(
+    config: Config,
+    paths: ResolvedPaths,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    names = tuple(
+        f"s{index}" for index in range(1, config.execution.n_instances)
+    )
+    if paths.laf is not None:
+        names += ("laf",)
+    if paths.asan_main is not None:
+        names += tuple(
+            f"asan{index}" for index in range(1, config.engine.asan_instances + 1)
+        )
+    return tuple(zip(names, build_worker_commands(config, paths), strict=True))
+
+
 def _build_fuzzer_command(
     paths: ResolvedPaths,
     args: tuple[str, ...],
