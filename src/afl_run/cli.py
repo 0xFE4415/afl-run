@@ -12,7 +12,7 @@ from afl_run.launcher import FuzzerProcess, abort_if_any_died, launch_fuzzer, te
 from afl_run.orchestration import (
     build_cmplog_command,
     build_master_command,
-    build_worker_commands,
+    build_worker_specs,
     prepare_shared_memory,
     wait_for_master,
 )
@@ -41,48 +41,23 @@ async def _run_campaign(cfg: Config, resolved: ResolvedPaths) -> None:
 
     environment = build_environment(cfg)
     fuzzers: list[FuzzerProcess] = []
+
+    async def launch(command: tuple[str, ...], name: str) -> FuzzerProcess:
+        fuzzer = await launch_fuzzer(command, name, paths.log_dir, environment, tmp_root)
+        fuzzers.append(fuzzer)
+        return fuzzer
+
     try:
-        master = await launch_fuzzer(
-            build_master_command(cfg, paths),
-            "main",
-            paths.log_dir,
-            environment,
-            tmp_root,
-        )
-        fuzzers.append(master)
+        master = await launch(build_master_command(cfg, paths), "main")
         await asyncio.to_thread(
             wait_for_master,
             paths.out_dir / "main" / "fuzzer_stats",
             master.process,
         )
 
-        cmplog = await launch_fuzzer(
-            build_cmplog_command(cfg, paths),
-            "cmplog",
-            paths.log_dir,
-            environment,
-            tmp_root,
-        )
-        fuzzers.append(cmplog)
-
-        worker_names = (f"s{index}" for index in range(1, cfg.execution.n_instances))
-        if paths.laf is not None:
-            worker_names = (*worker_names, "laf")
-        if paths.asan_main is not None:
-            worker_names = (
-                *worker_names,
-                *(f"asan{index}" for index in range(1, cfg.engine.asan_instances + 1)),
-            )
-        for name, command in zip(worker_names, build_worker_commands(cfg, paths), strict=True):
-            fuzzers.append(
-                await launch_fuzzer(
-                    command,
-                    name,
-                    paths.log_dir,
-                    environment,
-                    tmp_root,
-                )
-            )
+        await launch(build_cmplog_command(cfg, paths), "cmplog")
+        for name, command in build_worker_specs(cfg, paths):
+            await launch(command, name)
 
         await abort_if_any_died(tuple(fuzzers))
     except BaseException:
