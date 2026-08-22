@@ -57,7 +57,7 @@ async def _run_campaign(cfg: Config, resolved: ResolvedPaths) -> None:
 
 async def _run_campaign_with_signals(cfg: Config, resolved: ResolvedPaths) -> None:
     configure_host(cfg.host)
-    tmp_root = Path(cfg.engine.afl_tmpdir) if cfg.engine.afl_tmpdir is not None else None
+    tmp_root = resolved.afl_tmpdir
     if cfg.execution.fresh:
         reset_output_directory(resolved.out_dir)
     else:

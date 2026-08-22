@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class ExecutionConfig(BaseModel):
@@ -32,13 +30,6 @@ class EngineConfig(BaseModel):
     asan_instances: int = Field(default=2, ge=0)
     asan_timeout_scale: int = Field(default=2, ge=0)
     afl_tmpdir: str | None = None
-
-    @field_validator("afl_tmpdir")
-    @classmethod
-    def _check_tmpdir(cls, v: str | None) -> str | None:
-        if v is not None and not Path(v).is_dir():
-            raise ValueError(f"afl_tmpdir does not exist: {v}")
-        return v
 
 
 class EnvConfig(BaseModel):
