@@ -6,7 +6,7 @@ nox.options.default_venv_backend = "uv|virtualenv"
 @nox.session
 def ruff(session: nox.Session) -> None:
     session.install("ruff>=0.6")
-    session.run("ruff", "check", ".")
+    session.run("ruff", "check", "src", "tests")
 
 
 @nox.session

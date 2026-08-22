@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import shlex
 import subprocess
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
 from typing import BinaryIO, Protocol, Self
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ProcessLike(Protocol):
@@ -88,6 +92,7 @@ async def launch_fuzzer(
 
     log_file = log_path.open("wb")
     try:
+        LOGGER.info("starting %s: %s", name, shlex.join(command))
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=log_file,

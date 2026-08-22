@@ -25,6 +25,7 @@ class EngineConfig(BaseModel):
     timeout_ms: int = Field(default=2500, ge=0)
     timeout_asan_ms: int | None = Field(default=None, ge=0)
     memory_limit_mb: int | None = Field(default=None, ge=0)
+    memory_limit_cmplog_mb: int | None = Field(default=None, ge=0)
     memory_limit_asan_mb: int | None = Field(default=None, ge=0)
     max_input_length: int = Field(default=4096, ge=0)
     skip_deterministic: bool = True

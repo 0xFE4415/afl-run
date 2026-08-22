@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import call, patch
 
+import pytest
+
 from afl_run.config import HostConfig
 from afl_run.host import CORE_PATTERN, RANDOMIZE_VA_SPACE, configure_host
 
@@ -15,6 +17,12 @@ def test_configure_host() -> None:
         configure_host(HostConfig(randomize_va_space="1", core_pattern="core.%p"))
 
     assert run.call_args_list == [
+        call(
+            ["sudo", "-n", "true"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ),
         call(
             ["sudo", "tee", str(RANDOMIZE_VA_SPACE)],
             input="1\n",
@@ -40,3 +48,22 @@ def test_configure_host_skips_unchanged_values() -> None:
         configure_host(HostConfig(randomize_va_space="0", core_pattern="core"))
 
     run.assert_not_called()
+
+
+def test_configure_host_aborts_without_passwordless_sudo() -> None:
+    with (
+        patch("afl_run.host.Path.read_text", side_effect=["1\n", "core\n"]),
+        patch(
+            "afl_run.host.subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, ["sudo", "-n", "true"]),
+        ) as run,
+    ):
+        with pytest.raises(RuntimeError, match="passwordless sudo"):
+            configure_host(HostConfig(randomize_va_space="0", core_pattern="core"))
+
+    run.assert_called_once_with(
+        ["sudo", "-n", "true"],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )

@@ -9,7 +9,11 @@ from pathlib import Path
 from inotify_simple import INotify, flags
 
 from afl_run.config import Config
-from afl_run.engine import build_asan_args, build_common_args, build_common_no_cmplog_args
+from afl_run.engine import (
+    build_asan_args,
+    build_cmplog_args,
+    build_common_no_cmplog_args,
+)
 from afl_run.launcher import ProcessLike
 from afl_run.paths import ResolvedPaths
 
@@ -31,7 +35,7 @@ def build_cmplog_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...
         paths,
         "-S",
         "cmplog",
-        paths.cmplog,
+        paths.main,
         include_cmplog=True,
     )
 
@@ -81,7 +85,7 @@ def _build_standard_command(
     include_cmplog: bool,
 ) -> tuple[str, ...]:
     args = (
-        build_common_args(config.engine, paths)
+        build_cmplog_args(config.engine, paths)
         if include_cmplog
         else build_common_no_cmplog_args(config.engine, paths)
     )

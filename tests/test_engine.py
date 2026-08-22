@@ -7,6 +7,7 @@ from hypothesis import strategies as st
 from afl_run.config import EngineConfig
 from afl_run.engine import (
     build_asan_args,
+    build_cmplog_args,
     build_common_args,
     build_common_no_cmplog_args,
 )
@@ -39,6 +40,27 @@ def test_common_no_cmplog_can_disable_deterministic_skip() -> None:
         "-x",
         "dict",
     )
+
+
+def test_cmplog_args_use_independent_memory_limit() -> None:
+    config = EngineConfig(memory_limit_mb=1024, memory_limit_cmplog_mb=2048)
+    assert build_cmplog_args(config, relative_paths()) == (
+        "-G",
+        "4096",
+        "-m",
+        "2048",
+        "-t",
+        "2500",
+        "-c",
+        "cmplog",
+        "-x",
+        "dict",
+        "-z",
+    )
+
+
+def test_cmplog_args_default_to_unlimited() -> None:
+    assert "-m" not in build_cmplog_args(EngineConfig(memory_limit_mb=1024), relative_paths())
 
 
 def test_asan_args_use_scaled_timeout() -> None:
