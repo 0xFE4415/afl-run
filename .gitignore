@@ -9,8 +9,10 @@ __pycache__/
 dist/
 build/
 sample/build*/
-sample/logs/
-sample/out/
+sample/fuzz/*
+!sample/fuzz/.gitkeep
+sample/logs*/
+sample/out*/
 uv.lock
 .coverage
 .coverage.*
