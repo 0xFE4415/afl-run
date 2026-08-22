@@ -55,8 +55,14 @@ class EnvConfig(BaseModel):
     )
 
 
+class HostConfig(BaseModel):
+    randomize_va_space: str = "0"
+    core_pattern: str = "core"
+
+
 class Config(BaseModel):
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     paths: PathConfig = Field(default_factory=PathConfig)
     engine: EngineConfig = Field(default_factory=EngineConfig)
     env: EnvConfig = Field(default_factory=EnvConfig)
+    host: HostConfig = Field(default_factory=HostConfig)
