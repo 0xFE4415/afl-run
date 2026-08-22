@@ -1,7 +1,6 @@
 {
   "execution": {
-    "n_instances": 1,
-    "fresh": false,
+    "n_workers": 0,
     "log_dir": "logs"
   },
   "paths": {

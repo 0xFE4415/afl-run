@@ -10,7 +10,7 @@ from afl_run.config import Config, EngineConfig
 
 def test_default_config() -> None:
     cfg = Config(paths=minimal_path_config())
-    assert cfg.execution.n_instances == 1
+    assert cfg.execution.n_workers == 0
     assert cfg.engine.timeout_ms == 2500
     assert cfg.engine.memory_limit_mb is None
     assert cfg.env.variables == {}
@@ -52,5 +52,5 @@ def test_readme_config_example_matches_model() -> None:
     assert start
     assert end
     config = Config.model_validate_json(example)
-    assert config.execution.n_instances == 4
+    assert config.execution.n_workers == 4
     assert config.paths.main == "build-afl/afl_harness"

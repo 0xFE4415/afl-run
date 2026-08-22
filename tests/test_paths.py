@@ -68,7 +68,21 @@ def test_optional_laf_asan_absent(tmp_path: Path) -> None:
     assert resolved.asan_main is None
 
 
-@pytest.mark.parametrize("field", ["main", "cmplog", "dictionary", "seeds_dir", "out_dir"])
+def test_minimal_paths_use_main_as_cmplog_without_dictionary(tmp_path: Path) -> None:
+    main = _harness(tmp_path / "main")
+    seeds = _dir(tmp_path / "seeds")
+    out = tmp_path / "out"
+    cfg = Config(
+        paths=PathConfig(main=str(main), seeds_dir=str(seeds), out_dir=str(out))
+    )
+
+    resolved = resolve_paths(cfg)
+
+    assert resolved.cmplog == main
+    assert resolved.dictionary is None
+
+
+@pytest.mark.parametrize("field", ["main", "seeds_dir", "out_dir"])
 def test_missing_required_path(field: str, tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
     values = cfg.paths.model_dump()
