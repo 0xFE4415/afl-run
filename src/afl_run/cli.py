@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+from pathlib import Path
 
 import click
 
@@ -13,8 +13,7 @@ from afl_run.config import Config
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
 def main(config_path: str) -> None:
-    with open(config_path) as fh:
-        cfg = Config.model_validate(json.load(fh))
+    cfg = Config.model_validate_json(Path(config_path).read_text())
     click.echo(cfg.model_dump_json(indent=2))
 
 
