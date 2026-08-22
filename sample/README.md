@@ -69,9 +69,10 @@ AFL_NO_AFFINITY=1 timeout --signal=SIGTERM --kill-after=1s 0.3s \
 
 ## 5. Run through afl-run
 
-`config.json` is the minimal runner configuration. It only needs the
-main harness, seed directory, and output directory under `paths`; CmpLog
-defaults to the main harness and no dictionary is required.
+`config.json` is the minimal runner configuration. It only needs the main
+harness, seed directory, and output directory under `paths`; CmpLog is not
+started unless a dedicated `cmplog` harness is configured, and no dictionary
+is required.
 
 Run a 0.3-second campaign through the Python CLI:
 
@@ -79,8 +80,8 @@ Run a 0.3-second campaign through the Python CLI:
 AFL_NO_AFFINITY=1 uv run afl-run --fresh --timeout 0.3 sample/config.json
 ```
 
-The runner starts the main and CmpLog AFL++ processes, logs their commands,
-and terminates the campaign and child processes when the timeout expires.
+The runner starts the configured AFL++ processes, logs their commands, and
+terminates the campaign and child processes when the timeout expires.
 Generated build, log, and campaign-output directories are ignored by Git.
 
 ## 6. Build advanced AFL++ variants

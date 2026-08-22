@@ -68,7 +68,7 @@ def test_optional_laf_asan_absent(tmp_path: Path) -> None:
     assert resolved.asan_main is None
 
 
-def test_minimal_paths_use_main_as_cmplog_without_dictionary(tmp_path: Path) -> None:
+def test_minimal_paths_leave_cmplog_unconfigured_without_dictionary(tmp_path: Path) -> None:
     main = _harness(tmp_path / "main")
     seeds = _dir(tmp_path / "seeds")
     out = tmp_path / "out"
@@ -78,7 +78,7 @@ def test_minimal_paths_use_main_as_cmplog_without_dictionary(tmp_path: Path) -> 
 
     resolved = resolve_paths(cfg)
 
-    assert resolved.cmplog == main
+    assert resolved.cmplog is None
     assert resolved.dictionary is None
 
 

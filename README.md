@@ -59,8 +59,10 @@ variables for child `afl-fuzz` processes are key/value pairs under
 `env.variables`.
 
 `execution.n_workers` controls the number of standard worker instances. The
-master is always started separately. For example, `0` starts only the master,
-while `4` starts the master plus workers `s1`, `s2`, `s3`, and `s4`.
+master is always started separately. CmpLog, LAF, and ASAN instances are
+started only when their corresponding paths are configured. For example, `0`
+with no optional paths starts only the master, while `4` starts the master plus
+workers `s1`, `s2`, `s3`, and `s4`.
 
 Example:
 

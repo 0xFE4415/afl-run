@@ -4,16 +4,6 @@ from afl_run.config import EngineConfig
 from afl_run.paths import ResolvedPaths
 
 
-def build_common_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
-    return _build_args(
-        config,
-        paths,
-        include_cmplog=True,
-        timeout=config.timeout_ms,
-        memory_limit=config.memory_limit_mb,
-    )
-
-
 def build_cmplog_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ...]:
     return _build_args(
         config,

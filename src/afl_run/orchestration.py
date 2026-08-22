@@ -32,6 +32,8 @@ def build_master_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...
 
 
 def build_cmplog_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
+    if paths.cmplog is None:
+        raise ValueError("CmpLog harness is not configured")
     return _build_standard_command(
         config,
         paths,
@@ -116,8 +118,9 @@ def _build_fuzzer_command(
 
 
 def reset_output_directory(root: Path) -> None:
-    absolute_root = root.absolute()
-    if absolute_root in {Path("/"), Path.home(), Path.cwd().absolute()}:
+    resolved_root = root.resolve()
+    protected_paths = (Path("/"), Path.home().resolve(), Path.cwd().resolve())
+    if any(protected_path.is_relative_to(resolved_root) for protected_path in protected_paths):
         raise ValueError(f"refusing to remove unsafe output directory: {root}")
     if root.is_symlink() or (root.exists() and not root.is_dir()):
         raise ValueError(f"output directory is not a regular directory: {root}")

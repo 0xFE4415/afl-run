@@ -100,14 +100,15 @@ async def _run_campaign_with_signals(
             master.process,
         )
 
-        await group.launch(
-            build_cmplog_command(cfg, resolved),
-            "cmplog",
-            resolved.log_dir,
-            environment,
-            tmp_root,
-            append_logs,
-        )
+        if resolved.cmplog is not None:
+            await group.launch(
+                build_cmplog_command(cfg, resolved),
+                "cmplog",
+                resolved.log_dir,
+                environment,
+                tmp_root,
+                append_logs,
+            )
         for name, command in build_worker_specs(cfg, resolved):
             await group.launch(command, name, resolved.log_dir, environment, tmp_root, append_logs)
 
