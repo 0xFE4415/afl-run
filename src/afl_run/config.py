@@ -3,22 +3,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Self
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class ExecutionConfig(BaseModel):
     n_workers: int = Field(default=0, ge=0)
-    log_dir: str = "logs"
+    log_dir: str = Field(default="logs", min_length=1)
 
 
 class PathConfig(BaseModel):
-    main: str
-    seeds_dir: str
-    out_dir: str
-    cmplog: str | None = None
-    laf: str | None = None
-    asan_main: str | None = None
-    dictionary: str | None = None
+    main: str = Field(min_length=1)
+    seeds_dir: str = Field(min_length=1)
+    out_dir: str = Field(min_length=1)
+    cmplog: str | None = Field(default=None, min_length=1)
+    laf: str | None = Field(default=None, min_length=1)
+    asan_main: str | None = Field(default=None, min_length=1)
+    dictionary: str | None = Field(default=None, min_length=1)
 
 
 class EngineConfig(BaseModel):
@@ -31,17 +31,41 @@ class EngineConfig(BaseModel):
     skip_deterministic: bool = True
     asan_instances: int = Field(default=2, ge=0)
     asan_timeout_scale: int = Field(default=2, ge=0)
-    afl_tmpdir: str | None = None
+    afl_tmpdir: str | None = Field(default=None, min_length=1)
     additional_flags: tuple[str, ...] = ()
+
+    @field_validator("additional_flags")
+    @classmethod
+    def reject_blank_flags(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for flag in value:
+            if not flag.strip():
+                raise ValueError("additional_flags must not contain blank items")
+        return value
 
 
 class EnvConfig(BaseModel):
     variables: dict[str, str] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def reject_invalid_variable_names(self) -> Self:
+        for name in self.variables:
+            if not name or "=" in name or "\x00" in name:
+                raise ValueError(f"invalid environment variable name: {name!r}")
+        return self
+
 
 class HostConfig(BaseModel):
     randomize_va_space: str = "0"
-    core_pattern: str = "core"
+    core_pattern: str = Field(default="core", min_length=1)
+
+    @field_validator("randomize_va_space")
+    @classmethod
+    def check_randomize_va_space(cls, value: str) -> str:
+        if value not in ("0", "1", "2"):
+            raise ValueError(
+                f"randomize_va_space must be one of '0', '1', '2', got {value!r}"
+            )
+        return value
 
 
 class Config(BaseModel):

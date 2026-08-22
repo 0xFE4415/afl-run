@@ -29,9 +29,16 @@ def test_build_environment_uses_process_environment() -> None:
     assert environment["CUSTOM"] == "yes"
 
 
+_valid_names = st.text(
+    st.characters(exclude_characters="=\x00", exclude_categories=("Cs",)),
+    min_size=1,
+    max_size=20,
+)
+
+
 @given(
-    base=st.dictionaries(st.text(min_size=1, max_size=20), st.text(max_size=20)),
-    variables=st.dictionaries(st.text(min_size=1, max_size=20), st.text(max_size=20)),
+    base=st.dictionaries(_valid_names, st.text(max_size=20)),
+    variables=st.dictionaries(_valid_names, st.text(max_size=20)),
 )
 def test_build_environment_merges_arbitrary_mappings(
     base: dict[str, str],

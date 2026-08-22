@@ -8,7 +8,14 @@ from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
+from afl_run.config import (
+    Config,
+    EngineConfig,
+    EnvConfig,
+    ExecutionConfig,
+    HostConfig,
+    PathConfig,
+)
 
 
 def test_default_config() -> None:
@@ -138,6 +145,70 @@ def test_out_dir_disjoint_protected_directories_are_accepted(
 def test_engine_rejects_negative_values(field: str) -> None:
     with pytest.raises(ValueError):
         EngineConfig.model_validate({field: -1})
+
+
+@pytest.mark.parametrize("value", ["0", "1", "2"])
+def test_host_accepts_valid_randomize_va_space(value: str) -> None:
+    assert HostConfig(randomize_va_space=value).randomize_va_space == value
+
+
+@pytest.mark.parametrize("value", ["", "3", "-1", "01", "on", "false"])
+def test_host_rejects_invalid_randomize_va_space(value: str) -> None:
+    with pytest.raises(ValidationError, match="randomize_va_space"):
+        HostConfig(randomize_va_space=value)
+
+
+def test_host_rejects_empty_core_pattern() -> None:
+    with pytest.raises(ValidationError, match="core_pattern"):
+        HostConfig(core_pattern="")
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "main",
+        "seeds_dir",
+        "out_dir",
+        "cmplog",
+        "laf",
+        "asan_main",
+        "dictionary",
+    ],
+)
+def test_paths_reject_empty_strings(field: str) -> None:
+    values = dict.fromkeys(("main", "seeds_dir", "out_dir"), "x")
+    values[field] = ""
+
+    with pytest.raises(ValidationError, match=field):
+        PathConfig.model_validate(values)
+
+
+def test_execution_rejects_empty_log_dir() -> None:
+    with pytest.raises(ValidationError, match="log_dir"):
+        ExecutionConfig(log_dir="")
+
+
+def test_engine_rejects_empty_afl_tmpdir() -> None:
+    with pytest.raises(ValidationError, match="afl_tmpdir"):
+        EngineConfig(afl_tmpdir="")
+
+
+@pytest.mark.parametrize("flags", [("",), ("ok", "  ")])
+def test_engine_rejects_blank_additional_flags(flags: tuple[str, ...]) -> None:
+    with pytest.raises(ValidationError, match="additional_flags"):
+        EngineConfig(additional_flags=flags)
+
+
+@pytest.mark.parametrize("key", ["", "A=B", "A\x00B"])
+def test_env_rejects_invalid_variable_names(key: str) -> None:
+    with pytest.raises(ValidationError, match="invalid environment variable name"):
+        EnvConfig(variables={key: "1"})
+
+
+def test_env_accepts_regular_variable_names() -> None:
+    variables = {"AFL_MAP_SIZE": "262144"}
+
+    assert EnvConfig(variables=variables).variables == variables
 
 
 def test_readme_config_example_matches_model() -> None:
