@@ -43,60 +43,42 @@ def build_worker_commands(
     config: Config,
     paths: ResolvedPaths,
 ) -> tuple[tuple[str, ...], ...]:
-    workers = tuple(
-        _build_fuzzer_command(
-            paths,
-            build_common_no_cmplog_args(config.engine, paths),
-            "-S",
-            f"s{index}",
-            paths.main,
-        )
-        for index in range(1, config.execution.n_instances)
-    )
-    laf = (
-        (
-            _build_fuzzer_command(
-                paths,
-                build_common_no_cmplog_args(config.engine, paths),
-                "-S",
-                "laf",
-                paths.laf,
-            ),
-        )
-        if paths.laf is not None
-        else ()
-    )
-    asan = (
-        tuple(
-            _build_fuzzer_command(
-                paths,
-                build_asan_args(config.engine, paths),
-                "-S",
-                f"asan{index}",
-                paths.asan_main,
-            )
-            for index in range(1, config.engine.asan_instances + 1)
-        )
-        if paths.asan_main is not None
-        else ()
-    )
-    return workers + laf + asan
+    return tuple(command for _, command in build_worker_specs(config, paths))
 
 
 def build_worker_specs(
     config: Config,
     paths: ResolvedPaths,
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    names = tuple(
-        f"s{index}" for index in range(1, config.execution.n_instances)
-    )
-    if paths.laf is not None:
-        names += ("laf",)
-    if paths.asan_main is not None:
-        names += tuple(
-            f"asan{index}" for index in range(1, config.engine.asan_instances + 1)
+    specs: list[tuple[str, tuple[str, ...]]] = []
+    common_args = build_common_no_cmplog_args(config.engine, paths)
+    for index in range(1, config.execution.n_instances):
+        specs.append(
+            (
+                f"s{index}",
+                _build_fuzzer_command(paths, common_args, "-S", f"s{index}", paths.main),
+            )
         )
-    return tuple(zip(names, build_worker_commands(config, paths), strict=True))
+    if paths.laf is not None:
+        specs.append(
+            ("laf", _build_fuzzer_command(paths, common_args, "-S", "laf", paths.laf))
+        )
+    if paths.asan_main is not None:
+        asan_args = build_asan_args(config.engine, paths)
+        for index in range(1, config.engine.asan_instances + 1):
+            specs.append(
+                (
+                    f"asan{index}",
+                    _build_fuzzer_command(
+                        paths,
+                        asan_args,
+                        "-S",
+                        f"asan{index}",
+                        paths.asan_main,
+                    ),
+                )
+            )
+    return tuple(specs)
 
 
 def _build_fuzzer_command(
