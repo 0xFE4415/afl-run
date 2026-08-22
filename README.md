@@ -1,13 +1,13 @@
 # afl-fuzz-runner
 
 Python launcher for AFL++ fuzzing campaigns. Configuration is modelled with
-pydantic and driven via a Click CLI.
+pydantic and supplied as JSON through a Click CLI.
 
 ## Requirements
 
 - Python >= 3.13
 - [uv](https://github.com/astral-sh/uv)
-- AFL++ built harnesses (`MAIN`, `CMPLOG`, `asan_main`, `laf`)
+- Linux with AFL++ and built harnesses
 
 ## Setup
 
@@ -21,7 +21,7 @@ uv pip install -e ".[all]"
 All linters, type checks and tests are orchestrated with nox:
 
 ```sh
-nox -s check      # ruff + ty (strict) + pytest
+nox -s check      # ruff + ty (strict) + pytest + 100% branch coverage
 nox -s ruff       # ruff only
 nox -s ty         # ty (strict) only
 nox -s test       # pytest only
@@ -44,10 +44,7 @@ All settings are described by the pydantic models in `src/afl_run/config.py`
 afl-run config.json
 ```
 
-See `config.json` for the full default layout. Environment variables for the
-child `afl-fuzz` processes are kept as key/value pairs under
+All paths must be supplied in the JSON configuration; no paths are derived or
+rewritten. See `config.json` for the configuration layout. Environment
+variables for child `afl-fuzz` processes are key/value pairs under
 `env.variables`.
-
-## License
-
-TODO
