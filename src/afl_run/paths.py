@@ -16,7 +16,7 @@ class ResolvedPaths:
     cmplog: Path
     laf: Path | None
     asan_main: Path | None
-    dictionary: Path
+    dictionary: Path | None
     seeds_dir: Path
     out_dir: Path
     log_dir: Path
@@ -26,8 +26,8 @@ class ResolvedPaths:
 def resolve_paths(cfg: Config) -> ResolvedPaths:
     p = cfg.paths
     main = Path(p.main)
-    cmplog = Path(p.cmplog)
-    dictionary = Path(p.dictionary)
+    cmplog = Path(p.cmplog) if p.cmplog else main
+    dictionary = Path(p.dictionary) if p.dictionary else None
     seeds_dir = Path(p.seeds_dir)
     out_dir = Path(p.out_dir)
     laf = Path(p.laf) if p.laf else None
@@ -67,7 +67,8 @@ def _validate(r: ResolvedPaths) -> None:
         _require_file(r.laf, "LAF harness")
     if r.asan_main is not None:
         _require_file(r.asan_main, "ASAN harness")
-    _require_file(r.dictionary, "dictionary")
+    if r.dictionary is not None:
+        _require_file(r.dictionary, "dictionary")
     _require_dir(r.seeds_dir, "seeds dir")
     if r.afl_tmpdir is not None:
         _require_dir(r.afl_tmpdir, "afl_tmpdir")

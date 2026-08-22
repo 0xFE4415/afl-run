@@ -66,7 +66,8 @@ def _build_args(
     args += ("-t", str(timeout))
     if include_cmplog:
         args += ("-c", str(paths.cmplog))
-    args += ("-x", str(paths.dictionary))
+    if paths.dictionary is not None:
+        args += ("-x", str(paths.dictionary))
     if config.skip_deterministic:
         args += ("-z",)
     args += config.additional_flags

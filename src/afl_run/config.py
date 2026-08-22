@@ -4,19 +4,18 @@ from pydantic import BaseModel, Field
 
 
 class ExecutionConfig(BaseModel):
-    n_instances: int = Field(default=1, ge=1)
-    fresh: bool = False
+    n_workers: int = Field(default=0, ge=0)
     log_dir: str = "logs"
 
 
 class PathConfig(BaseModel):
     main: str
-    cmplog: str
-    laf: str | None = None
-    asan_main: str | None = None
-    dictionary: str
     seeds_dir: str
     out_dir: str
+    cmplog: str | None = None
+    laf: str | None = None
+    asan_main: str | None = None
+    dictionary: str | None = None
 
 
 class EngineConfig(BaseModel):

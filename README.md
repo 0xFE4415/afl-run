@@ -44,21 +44,28 @@ All settings are described by the pydantic models in `src/afl_run/config.py`
 afl-run config.json
 ```
 
+The campaign can be bounded from the command line with a floating-point
+timeout in seconds:
+
+```sh
+afl-run --timeout 3600.5 config.json
+```
+
 All paths must be supplied in the JSON configuration; no paths are derived or
 rewritten. See `config.json` for the configuration layout. Environment
 variables for child `afl-fuzz` processes are key/value pairs under
 `env.variables`.
 
-`execution.n_instances` includes the master. For example, `1` starts only the
-master, while `4` starts the master plus workers `s1`, `s2`, and `s3`.
+`execution.n_workers` controls the number of standard worker instances. The
+master is always started separately. For example, `0` starts only the master,
+while `4` starts the master plus workers `s1`, `s2`, `s3`, and `s4`.
 
 Example:
 
 ```json
 {
   "execution": {
-    "n_instances": 4,
-    "fresh": false,
+    "n_workers": 4,
     "log_dir": "logs"
   },
   "paths": {
@@ -112,7 +119,7 @@ These settings affect the whole system and are not restored when the campaign
 ends. Consider using AFL++'s supported `afl-system-config` tool to manage the
 host configuration instead.
 
-When `execution.fresh` is false, existing per-fuzzer logs are appended to so
+When `--fresh` is not supplied, existing per-fuzzer logs are appended to so
 that resumed campaigns retain earlier output. Fresh campaigns truncate logs.
 On resume, an existing master `fuzzer_stats` file is treated as readiness for
 the master, so a stale file can hide a master startup failure until the normal

@@ -84,7 +84,7 @@ def test_build_cmplog_command() -> None:
 
 def test_build_worker_specs() -> None:
     config = _config()
-    config.execution.n_instances = 3
+    config.execution.n_workers = 2
     config.engine.asan_instances = 2
     paths = relative_paths()
     paths.laf = Path("laf")
@@ -103,7 +103,7 @@ def test_build_worker_specs() -> None:
 
 def test_build_worker_specs_pairs_names_with_commands() -> None:
     config = _config()
-    config.execution.n_instances = 2
+    config.execution.n_workers = 1
     paths = relative_paths()
     paths.laf = Path("laf")
 

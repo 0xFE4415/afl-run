@@ -48,7 +48,7 @@ def build_worker_specs(
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
     specs: list[tuple[str, tuple[str, ...]]] = []
     common_args = build_common_no_cmplog_args(config.engine, paths)
-    for index in range(1, config.execution.n_instances):
+    for index in range(1, config.execution.n_workers + 1):
         specs.append(
             (
                 f"s{index}",

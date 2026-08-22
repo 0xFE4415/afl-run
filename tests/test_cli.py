@@ -17,11 +17,11 @@ from afl_run.paths import ResolvedPaths
 def _config(
     tmp_path: Path,
     *,
-    n_instances: int = 1,
+    n_workers: int = 0,
     optional: bool = False,
 ) -> tuple[Config, ResolvedPaths]:
     cfg = Config(
-        execution=ExecutionConfig(n_instances=n_instances, fresh=True),
+        execution=ExecutionConfig(n_workers=n_workers),
         paths=PathConfig(
             main="main",
             cmplog="cmplog",
@@ -52,7 +52,7 @@ def _fuzzer(name: str) -> FuzzerProcess:
 
 
 def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None:
-    cfg, paths = _config(tmp_path, n_instances=3, optional=True)
+    cfg, paths = _config(tmp_path, n_workers=3, optional=True)
     launched: list[str] = []
 
     async def launch(
@@ -73,17 +73,15 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None
         patch("afl_run.cli.FuzzerGroup.abort_if_any_died", new=AsyncMock()),
         patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
     ):
-        asyncio.run(_run_campaign(cfg, paths))
+        asyncio.run(_run_campaign(cfg, paths, fresh=True))
 
     configure.assert_called_once_with(cfg.host)
     prepare.assert_called_once_with(paths.out_dir)
-    assert launched == ["main", "cmplog", "s1", "s2", "laf", "asan1", "asan2"]
+    assert launched == ["main", "cmplog", "s1", "s2", "s3", "laf", "asan1", "asan2"]
 
 
 def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path)
-    cfg.execution.fresh = False
-
     async def launch(
         command: tuple[str, ...],
         name: str,
@@ -178,3 +176,30 @@ def test_main_handles_campaign_cancellation(tmp_path: Path) -> None:
         result = CliRunner().invoke(main, [str(config_path)])
 
     assert result.exit_code == 0
+
+
+def test_main_handles_campaign_timeout(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}")
+
+    def timeout(campaign: Any) -> None:
+        campaign.close()
+        raise TimeoutError
+
+    with (
+        patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
+        patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
+        patch("afl_run.cli.asyncio.run", side_effect=timeout),
+    ):
+        result = CliRunner().invoke(main, ["--timeout", "1.5", str(config_path)])
+
+    assert result.exit_code == 0
+
+
+def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
+    cfg, paths = _config(tmp_path)
+
+    with patch("afl_run.cli._run_campaign_with_signals", new=AsyncMock()) as campaign:
+        asyncio.run(_run_campaign(cfg, paths, timeout=1.5))
+
+    campaign.assert_awaited_once_with(cfg, paths, False)

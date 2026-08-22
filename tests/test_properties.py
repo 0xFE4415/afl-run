@@ -12,14 +12,13 @@ from afl_run.paths import resolve_paths
 
 
 @given(
-    n=st.integers(min_value=1, max_value=64),
-    fresh=st.booleans(),
+    n=st.integers(min_value=0, max_value=64),
     timeout=st.integers(min_value=1, max_value=60000),
 )
-def test_config_roundtrip(n: int, fresh: bool, timeout: int) -> None:
+def test_config_roundtrip(n: int, timeout: int) -> None:
     cfg = Config(
         paths=minimal_path_config(),
-        execution=ExecutionConfig(n_instances=n, fresh=fresh),
+        execution=ExecutionConfig(n_workers=n),
         engine=EngineConfig(timeout_ms=timeout),
     )
     restored = Config.model_validate(cfg.model_dump())
