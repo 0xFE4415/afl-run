@@ -84,19 +84,19 @@ def test_asan_args_use_explicit_timeout() -> None:
 
 
 @given(
-    globals_=st.integers(min_value=0, max_value=1_000_000),
+    max_input_length=st.integers(min_value=0, max_value=1_000_000),
     memory=st.integers(min_value=0, max_value=1_000_000),
     timeout=st.integers(min_value=0, max_value=1_000_000),
     skip_deterministic=st.booleans(),
 )
 def test_common_args_reflect_engine_settings(
-    globals_: int,
+    max_input_length: int,
     memory: int,
     timeout: int,
     skip_deterministic: bool,
 ) -> None:
     config = EngineConfig(
-        globals=globals_,
+        max_input_length=max_input_length,
         memory_limit_mb=memory,
         timeout_ms=timeout,
         skip_deterministic=skip_deterministic,
@@ -106,7 +106,7 @@ def test_common_args_reflect_engine_settings(
 
     assert args[:6] == (
         "-G",
-        str(globals_),
+        str(max_input_length),
         "-m",
         str(memory),
         "-t",

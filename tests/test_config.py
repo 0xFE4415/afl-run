@@ -24,6 +24,22 @@ def test_afl_tmpdir_missing_raises() -> None:
         EngineConfig(afl_tmpdir="/no/such/dir/abc123")
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "timeout_ms",
+        "timeout_asan_ms",
+        "memory_limit_mb",
+        "max_input_length",
+        "asan_instances",
+        "asan_timeout_scale",
+    ],
+)
+def test_engine_rejects_negative_values(field: str) -> None:
+    with pytest.raises(ValueError):
+        EngineConfig.model_validate({field: -1})
+
+
 def test_readme_config_example_matches_model() -> None:
     readme = Path(__file__).parents[1] / "README.md"
     content = readme.read_text(encoding="utf-8")
