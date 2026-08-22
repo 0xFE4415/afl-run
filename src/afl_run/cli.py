@@ -40,15 +40,15 @@ LOGGER = logging.getLogger(__name__)
 def main(config_path: str, timeout: float | None, fresh: bool) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
-        cfg = Config.model_validate_json(Path(config_path).read_text())
+        config = Config.model_validate_json(Path(config_path).read_text())
     except ValidationError as error:
         raise click.ClickException(str(error)) from error
     try:
-        resolved = resolve_paths(cfg)
+        resolved = resolve_paths(config)
     except PathValidationError as error:
         raise click.ClickException(str(error)) from error
     try:
-        asyncio.run(_run_campaign(cfg, resolved, timeout, fresh))
+        asyncio.run(_run_campaign(config, resolved, timeout, fresh))
     except asyncio.CancelledError:
         LOGGER.info("campaign interrupted")
     except TimeoutError:
@@ -58,7 +58,7 @@ def main(config_path: str, timeout: float | None, fresh: bool) -> None:
 
 
 async def _run_campaign(
-    cfg: Config,
+    config: Config,
     resolved: ResolvedPaths,
     timeout: float | None = None,
     fresh: bool = False,
@@ -70,7 +70,7 @@ async def _run_campaign(
         loop.add_signal_handler(signum, task.cancel)
 
     try:
-        campaign = _run_campaign_with_signals(cfg, resolved, fresh)
+        campaign = _run_campaign_with_signals(config, resolved, fresh)
         if timeout is None:
             await campaign
         else:
@@ -81,20 +81,20 @@ async def _run_campaign(
 
 
 async def _run_campaign_with_signals(
-    cfg: Config, resolved: ResolvedPaths, fresh: bool
+    config: Config, resolved: ResolvedPaths, fresh: bool
 ) -> None:
-    await asyncio.to_thread(configure_host, cfg.host)
+    await asyncio.to_thread(configure_host, config.host)
     tmp_root = resolved.afl_tmpdir
     if fresh:
         await asyncio.to_thread(reset_output_directory, resolved.out_dir)
     else:
         resolved.out_dir.mkdir(parents=True, exist_ok=True)
 
-    environment = build_environment(cfg)
+    environment = build_environment(config)
     append_logs = not fresh
     async with FuzzerGroup() as group:
         master = await group.launch(
-            build_master_command(cfg, resolved),
+            build_master_command(config, resolved),
             MASTER_NAME,
             resolved.log_dir,
             environment,
@@ -109,14 +109,14 @@ async def _run_campaign_with_signals(
 
         if resolved.cmplog is not None:
             await group.launch(
-                build_cmplog_command(cfg, resolved),
+                build_cmplog_command(config, resolved),
                 "cmplog",
                 resolved.log_dir,
                 environment,
                 tmp_root,
                 append_logs,
             )
-        for name, command in build_worker_specs(cfg, resolved):
+        for name, command in build_worker_specs(config, resolved):
             await group.launch(command, name, resolved.log_dir, environment, tmp_root, append_logs)
 
         await group.abort_if_any_died()

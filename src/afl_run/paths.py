@@ -23,28 +23,17 @@ class ResolvedPaths:
     afl_tmpdir: Path | None = None
 
 
-def resolve_paths(cfg: Config) -> ResolvedPaths:
-    path_config = cfg.paths
-    main = Path(path_config.main)
-    cmplog = Path(path_config.cmplog) if path_config.cmplog else None
-    dictionary = Path(path_config.dictionary) if path_config.dictionary else None
-    seeds_dir = Path(path_config.seeds_dir)
-    out_dir = Path(path_config.out_dir)
-    laf = Path(path_config.laf) if path_config.laf else None
-    asan_main = Path(path_config.asan_main) if path_config.asan_main else None
-    log_dir = Path(cfg.execution.log_dir)
-    afl_tmpdir = Path(cfg.engine.afl_tmpdir) if cfg.engine.afl_tmpdir else None
-
+def resolve_paths(config: Config) -> ResolvedPaths:
     resolved = ResolvedPaths(
-        main=main,
-        cmplog=cmplog,
-        laf=laf,
-        asan_main=asan_main,
-        dictionary=dictionary,
-        seeds_dir=seeds_dir,
-        out_dir=out_dir,
-        log_dir=log_dir,
-        afl_tmpdir=afl_tmpdir,
+        main=Path(config.paths.main),
+        cmplog=Path(config.paths.cmplog) if config.paths.cmplog else None,
+        laf=Path(config.paths.laf) if config.paths.laf else None,
+        asan_main=Path(config.paths.asan_main) if config.paths.asan_main else None,
+        dictionary=Path(config.paths.dictionary) if config.paths.dictionary else None,
+        seeds_dir=Path(config.paths.seeds_dir),
+        out_dir=Path(config.paths.out_dir),
+        log_dir=Path(config.execution.log_dir),
+        afl_tmpdir=Path(config.engine.afl_tmpdir) if config.engine.afl_tmpdir else None,
     )
     _validate(resolved)
     return resolved

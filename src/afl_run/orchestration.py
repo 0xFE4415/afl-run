@@ -51,30 +51,16 @@ def build_worker_specs(
     specs: list[tuple[str, tuple[str, ...]]] = []
     common_args = build_common_no_cmplog_args(config.engine, paths)
     for index in range(1, config.execution.n_workers + 1):
-        specs.append(
-            (
-                f"s{index}",
-                _build_fuzzer_command(paths, common_args, "-S", f"s{index}", paths.main),
-            )
-        )
+        name = f"s{index}"
+        specs.append((name, _build_fuzzer_command(paths, common_args, "-S", name, paths.main)))
     if paths.laf is not None:
-        specs.append(
-            ("laf", _build_fuzzer_command(paths, common_args, "-S", "laf", paths.laf))
-        )
+        specs.append(("laf", _build_fuzzer_command(paths, common_args, "-S", "laf", paths.laf)))
     if paths.asan_main is not None:
         asan_args = build_asan_args(config.engine, paths)
         for index in range(1, config.engine.asan_instances + 1):
+            name = f"asan{index}"
             specs.append(
-                (
-                    f"asan{index}",
-                    _build_fuzzer_command(
-                        paths,
-                        asan_args,
-                        "-S",
-                        f"asan{index}",
-                        paths.asan_main,
-                    ),
-                )
+                (name, _build_fuzzer_command(paths, asan_args, "-S", name, paths.asan_main))
             )
     return tuple(specs)
 
