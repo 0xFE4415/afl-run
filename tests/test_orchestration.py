@@ -149,6 +149,9 @@ class _Notifier:
         if self.reads == 2:
             self.stats.write_text("")
 
+    def close(self) -> None:
+        return None
+
 
 class _Process:
     pid = 123
