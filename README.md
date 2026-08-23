@@ -1,4 +1,4 @@
-# afl-fuzz-runner
+# afl-run
 
 Python launcher for AFL++ fuzzing campaigns. Configuration is modelled with
 pydantic and supplied as JSON through a Click CLI.

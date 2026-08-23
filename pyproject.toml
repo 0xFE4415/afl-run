@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "afl-fuzz-runner"
+name = "afl-run"
 version = "0.1.0"
 license = "BSD-3-Clause"
 license-files = ["LICENSE"]
@@ -32,7 +32,7 @@ dev = [
     "nox>=2024.0",
 ]
 all = [
-    "afl-fuzz-runner[test,dev]",
+    "afl-run[test,dev]",
 ]
 
 [tool.pytest.ini_options]
