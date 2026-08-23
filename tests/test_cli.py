@@ -89,16 +89,23 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path, caplog)
 
 def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path, cmplog=False)
+    existing = paths.out_dir / "existing.txt"
+    paths.out_dir.mkdir(parents=True)
+    existing.write_text("keep")
+    launched: list[str] = []
+
     async def launch(
         command: tuple[str, ...],
         name: str,
         *args: object,
         **kwargs: object,
     ) -> FuzzerProcess:
+        launched.append(name)
         return _fuzzer(name)
 
     with (
         patch("afl_run.cli.configure_host"),
+        patch("afl_run.cli.reset_output_directory") as prepare,
         patch("afl_run.cli.build_environment", return_value={}),
         patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
         patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()),
@@ -108,6 +115,9 @@ def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Pa
         asyncio.run(_run_campaign(cfg, paths))
 
     assert paths.out_dir.is_dir()
+    assert existing.read_text() == "keep"
+    assert launched == ["main"]
+    prepare.assert_not_called()
 
 
 def test_run_campaign_end_to_end_with_stub_afl_fuzz(tmp_path: Path, monkeypatch) -> None:
@@ -212,7 +222,8 @@ def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
     exit_group.assert_awaited_once()
 
 
-def test_main_handles_campaign_cancellation(tmp_path: Path) -> None:
+def test_main_handles_campaign_cancellation(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
     config_path = tmp_path / "config.json"
     config_path.write_text("{}")
 
@@ -228,9 +239,11 @@ def test_main_handles_campaign_cancellation(tmp_path: Path) -> None:
         result = CliRunner().invoke(main, [str(config_path)])
 
     assert result.exit_code == 0
+    assert "campaign interrupted" in caplog.text
 
 
-def test_main_handles_campaign_timeout(tmp_path: Path) -> None:
+def test_main_handles_campaign_timeout(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
     config_path = tmp_path / "config.json"
     config_path.write_text("{}")
 
@@ -246,6 +259,7 @@ def test_main_handles_campaign_timeout(tmp_path: Path) -> None:
         result = CliRunner().invoke(main, ["--timeout", "1.5", str(config_path)])
 
     assert result.exit_code == 0
+    assert "campaign timed out" in caplog.text
 
 
 def test_main_reports_campaign_runtime_error(tmp_path: Path) -> None:
@@ -255,7 +269,10 @@ def test_main_reports_campaign_runtime_error(tmp_path: Path) -> None:
     with (
         patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
         patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
-        patch("afl_run.cli.asyncio.run", side_effect=RuntimeError("campaign failed")),
+        patch(
+            "afl_run.cli.asyncio.run",
+            side_effect=_close_and_raise(RuntimeError("campaign failed")),
+        ),
     ):
         result = CliRunner().invoke(main, [str(config_path)])
 
@@ -270,12 +287,20 @@ def test_main_reports_campaign_os_error(tmp_path: Path) -> None:
     with (
         patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
         patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
-        patch("afl_run.cli.asyncio.run", side_effect=OSError("disk full")),
+        patch("afl_run.cli.asyncio.run", side_effect=_close_and_raise(OSError("disk full"))),
     ):
         result = CliRunner().invoke(main, [str(config_path)])
 
     assert result.exit_code == 1
     assert "Error: disk full" in result.output
+
+
+def _close_and_raise(error: BaseException):
+    def raise_error(campaign: Any) -> None:
+        campaign.close()
+        raise error
+
+    return raise_error
 
 
 def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
