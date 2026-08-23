@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from click.testing import CliRunner
+from hypothesis import given
+from hypothesis import strategies as st
 from pydantic import ValidationError
 
 from afl_run.cli import main
@@ -66,6 +69,30 @@ def test_optional_laf_asan_absent(tmp_path: Path) -> None:
     resolved = resolve_paths(cfg)
     assert resolved.laf is None
     assert resolved.asan_main is None
+
+
+@given(
+    cmplog=st.booleans(),
+    laf=st.booleans(),
+    asan=st.booleans(),
+    dictionary=st.booleans(),
+)
+def test_optional_paths_resolve_for_all_configurations(
+    cmplog: bool, laf: bool, asan: bool, dictionary: bool
+) -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        cfg = _valid_config(Path(directory))
+        cfg.paths.cmplog = cfg.paths.cmplog if cmplog else None
+        cfg.paths.laf = cfg.paths.laf if laf else None
+        cfg.paths.asan_main = cfg.paths.asan_main if asan else None
+        cfg.paths.dictionary = cfg.paths.dictionary if dictionary else None
+
+        resolved = resolve_paths(cfg)
+
+        assert (resolved.cmplog is not None) is cmplog
+        assert (resolved.laf is not None) is laf
+        assert (resolved.asan_main is not None) is asan
+        assert (resolved.dictionary is not None) is dictionary
 
 
 def test_minimal_paths_leave_cmplog_unconfigured_without_dictionary(tmp_path: Path) -> None:
