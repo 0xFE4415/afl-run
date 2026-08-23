@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import shlex
 import signal
 from pathlib import Path
 
@@ -45,13 +44,8 @@ def main(config_path: str, timeout: float | None, fresh: bool, dry_run: bool) ->
         resolved = resolve_paths(config)
     except ValueError as error:
         raise click.ClickException(str(error)) from error
-    if dry_run and fresh:
-        raise click.ClickException("--dry-run cannot be combined with --fresh")
-    if dry_run:
-        _print_dry_run(config, resolved)
-        return
     try:
-        asyncio.run(_run_campaign(config, resolved, timeout, fresh))
+        asyncio.run(_run_campaign(config, resolved, timeout, fresh, dry_run))
     except asyncio.CancelledError:
         LOGGER.info("campaign interrupted")
     except TimeoutError:
@@ -60,17 +54,12 @@ def main(config_path: str, timeout: float | None, fresh: bool, dry_run: bool) ->
         raise click.ClickException(str(error)) from error
 
 
-def _print_dry_run(config: Config, resolved: ResolvedPaths) -> None:
-    click.echo("Dry run: no processes will be started.")
-    for name, command in build_campaign_specs(config, resolved):
-        click.echo(f"would start {name}: {shlex.join(command)}")
-
-
 async def _run_campaign(
     config: Config,
     resolved: ResolvedPaths,
     timeout: float | None = None,
     fresh: bool = False,
+    dry_run: bool = False,
 ) -> None:
     loop = asyncio.get_running_loop()
     task = asyncio.current_task()
@@ -79,7 +68,7 @@ async def _run_campaign(
         loop.add_signal_handler(signum, task.cancel)
 
     try:
-        campaign = _run_campaign_with_signals(config, resolved, fresh, timeout)
+        campaign = _run_campaign_with_signals(config, resolved, fresh, timeout, dry_run)
         await campaign
     finally:
         for signum in SHUTDOWN_SIGNALS:
@@ -87,18 +76,25 @@ async def _run_campaign(
 
 
 async def _run_campaign_with_signals(
-    config: Config, resolved: ResolvedPaths, fresh: bool, timeout: float | None = None
+    config: Config,
+    resolved: ResolvedPaths,
+    fresh: bool,
+    timeout: float | None = None,
+    dry_run: bool = False,
 ) -> None:
-    await asyncio.to_thread(configure_host, config.host)
-    tmp_root = resolved.afl_tmpdir
-    if fresh:
-        await asyncio.to_thread(reset_output_directory, resolved.out_dir)
+    if not dry_run:
+        await asyncio.to_thread(configure_host, config.host)
+        tmp_root = resolved.afl_tmpdir
+        if fresh:
+            await asyncio.to_thread(reset_output_directory, resolved.out_dir)
+        else:
+            resolved.out_dir.mkdir(parents=True, exist_ok=True)
     else:
-        resolved.out_dir.mkdir(parents=True, exist_ok=True)
+        tmp_root = None
 
     environment = build_environment(config)
     append_logs = not fresh
-    async with FuzzerGroup() as group:
+    async with FuzzerGroup(dry_run=dry_run) as group:
         specs = build_campaign_specs(config, resolved)
         master_name, master_command = specs[0]
         master = await group.launch(
@@ -109,13 +105,11 @@ async def _run_campaign_with_signals(
             tmp_root,
             append_logs,
         )
-        await asyncio.wait_for(
-            asyncio.to_thread(
-                wait_for_master,
-                resolved.out_dir / MASTER_NAME / "fuzzer_stats",
-                master.process,
-            ),
-            timeout=MASTER_STARTUP_TIMEOUT_SECONDS,
+        await group.wait_for_master(
+            resolved.out_dir / MASTER_NAME / "fuzzer_stats",
+            master.process,
+            wait_for_master,
+            MASTER_STARTUP_TIMEOUT_SECONDS,
         )
 
         async def run_campaign() -> None:

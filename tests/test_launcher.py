@@ -145,6 +145,18 @@ def test_fuzzer_group_tracks_launched_fuzzer() -> None:
     asyncio.run(run())
 
 
+def test_dry_run_group_does_not_spawn_processes() -> None:
+    async def run() -> None:
+        async with FuzzerGroup(dry_run=True) as group:
+            fuzzer = await group.launch(("afl-fuzz",), "main", Path("logs"), {})
+            assert group.fuzzers == (fuzzer,)
+            fuzzer.process.terminate()
+            fuzzer.process.kill()
+            assert await fuzzer.process.wait() == 0
+
+    asyncio.run(run())
+
+
 def test_fuzzer_group_terminates_processes_on_exit() -> None:
     live_process = _process()
     dead_process = _process(returncode=1)

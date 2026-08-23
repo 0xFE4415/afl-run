@@ -56,7 +56,8 @@ afl-run --timeout 3600.5 config.json
 ```
 
 Use `--dry-run` to validate the configuration and print the commands without
-starting a campaign:
+starting a campaign. It follows the same campaign setup path without launching
+processes:
 
 ```sh
 afl-run --dry-run config.json

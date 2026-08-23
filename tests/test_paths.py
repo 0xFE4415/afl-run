@@ -180,33 +180,34 @@ def test_cli_main(tmp_path: Path) -> None:
     run_campaign.assert_awaited_once()
 
 
-def test_cli_dry_run_prints_commands_without_starting_campaign(tmp_path: Path) -> None:
+def test_cli_dry_run_runs_shared_campaign_path(tmp_path: Path, caplog) -> None:
+    caplog.set_level("INFO")
     cfg = _valid_config(tmp_path)
     config_path = tmp_path / "config.json"
     config_path.write_text(cfg.model_dump_json())
 
-    with patch("afl_run.cli.asyncio.run") as run_campaign:
-        result = CliRunner().invoke(main, ["--dry-run", str(config_path)])
+    result = CliRunner().invoke(main, ["--dry-run", str(config_path)])
 
     assert result.exit_code == 0
-    assert "Dry run: no processes will be started." in result.output
-    assert "would start main: afl-fuzz" in result.output
-    assert "would start cmplog: afl-fuzz" in result.output
-    run_campaign.assert_not_called()
+    assert "would start main: afl-fuzz" in caplog.text
+    assert "would start cmplog: afl-fuzz" in caplog.text
 
 
-def test_cli_dry_run_rejects_fresh(tmp_path: Path) -> None:
+def test_cli_dry_run_accepts_fresh_without_modifying_output(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
+    existing = Path(cfg.paths.out_dir) / "existing.txt"
+    existing.write_text("keep")
     config_path = tmp_path / "config.json"
     config_path.write_text(cfg.model_dump_json())
 
     result = CliRunner().invoke(main, ["--dry-run", "--fresh", str(config_path)])
 
-    assert result.exit_code != 0
-    assert "cannot be combined" in result.output
+    assert result.exit_code == 0
+    assert existing.read_text() == "keep"
 
 
-def test_cli_dry_run_prints_minimal_campaign(tmp_path: Path) -> None:
+def test_cli_dry_run_prints_minimal_campaign(tmp_path: Path, caplog) -> None:
+    caplog.set_level("INFO")
     cfg = _valid_config(tmp_path)
     cfg.paths.cmplog = None
     cfg.paths.laf = None
@@ -218,8 +219,8 @@ def test_cli_dry_run_prints_minimal_campaign(tmp_path: Path) -> None:
     result = CliRunner().invoke(main, ["--dry-run", str(config_path)])
 
     assert result.exit_code == 0
-    assert "would start main: afl-fuzz" in result.output
-    assert "would start cmplog" not in result.output
+    assert "would start main: afl-fuzz" in caplog.text
+    assert "would start cmplog" not in caplog.text
 
 
 def test_cli_reports_missing_path(tmp_path: Path) -> None:

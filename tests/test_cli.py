@@ -313,7 +313,7 @@ def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
     with patch("afl_run.cli._run_campaign_with_signals", new=AsyncMock()) as campaign:
         asyncio.run(_run_campaign(cfg, paths, timeout=1.5))
 
-    campaign.assert_awaited_once_with(cfg, paths, False, 1.5)
+    campaign.assert_awaited_once_with(cfg, paths, False, 1.5, False)
 
 
 def test_run_campaign_registers_and_removes_interrupt_signals(tmp_path: Path) -> None:
