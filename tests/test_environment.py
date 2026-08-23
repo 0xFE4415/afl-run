@@ -21,11 +21,13 @@ def test_build_environment_preserves_base_and_applies_config() -> None:
     assert environment["CUSTOM"] == "yes"
 
 
-def test_build_environment_uses_process_environment() -> None:
+def test_build_environment_uses_process_environment(monkeypatch) -> None:
+    monkeypatch.setenv("FROM_PROCESS", "yes")
     cfg = Config(paths=minimal_path_config(), env=EnvConfig(variables={"CUSTOM": "yes"}))
 
     environment = build_environment(cfg)
 
+    assert environment["FROM_PROCESS"] == "yes"
     assert environment["CUSTOM"] == "yes"
 
 

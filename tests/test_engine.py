@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from helpers import relative_paths
 from hypothesis import given
 from hypothesis import strategies as st
@@ -85,7 +87,7 @@ def test_asan_args_use_scaled_timeout() -> None:
     )
 
 
-def test_asan_args_use_explicit_timeout() -> None:
+def test_asan_args_use_scaled_timeout_with_memory_limit() -> None:
     config = EngineConfig(
         memory_limit_asan_mb=512,
         skip_deterministic=False,
@@ -136,6 +138,44 @@ def test_common_args_reflect_engine_settings(
 
 
 @given(
+    memory=st.none() | st.integers(min_value=0, max_value=1_000_000),
+    dictionary=st.none() | st.just(Path("dict")),
+    skip_deterministic=st.booleans(),
+    additional_flags=st.lists(
+        st.from_regex(r"--?[a-z]{1,6}", fullmatch=True), max_size=3
+    ).map(tuple),
+)
+def test_common_args_preserve_optional_settings(
+    memory: int | None,
+    dictionary: Path | None,
+    skip_deterministic: bool,
+    additional_flags: tuple[str, ...],
+) -> None:
+    paths = relative_paths()
+    paths.dictionary = dictionary
+    config = EngineConfig(
+        memory_limit_mb=memory,
+        skip_deterministic=skip_deterministic,
+        additional_flags=additional_flags,
+    )
+
+    args = build_common_no_cmplog_args(config, paths)
+
+    assert args[:2] == ("-G", "4096")
+    if memory is not None:
+        assert ("-m", str(memory)) in zip(args, args[1:])
+    else:
+        assert "-m" not in args
+    if dictionary is not None:
+        assert ("-x", str(dictionary)) in zip(args, args[1:])
+    else:
+        assert "-x" not in args
+    assert ("-z" in args) is skip_deterministic
+    if additional_flags:
+        assert args[-len(additional_flags) :] == additional_flags
+
+
+@given(
     timeout=st.integers(min_value=0, max_value=1_000_000),
     scale=st.integers(min_value=0, max_value=100),
 )
@@ -151,7 +191,7 @@ def test_asan_args_scale_timeout(timeout: int, scale: int) -> None:
     timeout=st.integers(min_value=0, max_value=1_000_000),
     scale=st.integers(min_value=0, max_value=100),
 )
-def test_asan_args_explicit_timeout_overrides_scale(
+def test_asan_args_scale_timeout_property(
     timeout: int, scale: int
 ) -> None:
     config = EngineConfig(
