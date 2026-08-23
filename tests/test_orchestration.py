@@ -13,6 +13,7 @@ from hypothesis import strategies as st
 
 from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
 from afl_run.orchestration import (
+    build_campaign_specs,
     build_cmplog_command,
     build_master_command,
     build_worker_specs,
@@ -128,6 +129,17 @@ def test_build_worker_specs_pairs_names_with_commands() -> None:
         ("-S", "s1", "--", "main"),
         ("-S", "laf", "--", "laf"),
     ]
+
+
+def test_build_campaign_specs_orders_master_before_other_fuzzers() -> None:
+    config = _config()
+    config.execution.n_workers = 1
+    paths = relative_paths()
+    paths.laf = Path("laf")
+
+    specs = build_campaign_specs(config, paths)
+
+    assert [name for name, _ in specs] == ["main", "cmplog", "s1", "laf"]
 
 
 @given(

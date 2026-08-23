@@ -14,9 +14,7 @@ from afl_run.host import configure_host
 from afl_run.launcher import FuzzerGroup
 from afl_run.orchestration import (
     MASTER_NAME,
-    build_cmplog_command,
-    build_master_command,
-    build_worker_specs,
+    build_campaign_specs,
     reset_output_directory,
     wait_for_master,
 )
@@ -64,10 +62,7 @@ def main(config_path: str, timeout: float | None, fresh: bool, dry_run: bool) ->
 
 def _print_dry_run(config: Config, resolved: ResolvedPaths) -> None:
     click.echo("Dry run: no processes will be started.")
-    click.echo(f"would start main: {shlex.join(build_master_command(config, resolved))}")
-    if resolved.cmplog is not None:
-        click.echo(f"would start cmplog: {shlex.join(build_cmplog_command(config, resolved))}")
-    for name, command in build_worker_specs(config, resolved):
+    for name, command in build_campaign_specs(config, resolved):
         click.echo(f"would start {name}: {shlex.join(command)}")
 
 
@@ -104,9 +99,11 @@ async def _run_campaign_with_signals(
     environment = build_environment(config)
     append_logs = not fresh
     async with FuzzerGroup() as group:
+        specs = build_campaign_specs(config, resolved)
+        master_name, master_command = specs[0]
         master = await group.launch(
-            build_master_command(config, resolved),
-            MASTER_NAME,
+            master_command,
+            master_name,
             resolved.log_dir,
             environment,
             tmp_root,
@@ -122,16 +119,7 @@ async def _run_campaign_with_signals(
         )
 
         async def run_campaign() -> None:
-            if resolved.cmplog is not None:
-                await group.launch(
-                    build_cmplog_command(config, resolved),
-                    "cmplog",
-                    resolved.log_dir,
-                    environment,
-                    tmp_root,
-                    append_logs,
-                )
-            for name, command in build_worker_specs(config, resolved):
+            for name, command in specs[1:]:
                 await group.launch(
                     command, name, resolved.log_dir, environment, tmp_root, append_logs
                 )

@@ -211,7 +211,10 @@ def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
     with (
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.build_environment", return_value={}),
-        patch("afl_run.cli.build_master_command", side_effect=OSError("command failed")),
+            patch(
+                "afl_run.orchestration.build_master_command",
+                side_effect=OSError("command failed"),
+            ),
         patch(
             "afl_run.cli.FuzzerGroup.__aexit__",
             new=AsyncMock(return_value=False),
