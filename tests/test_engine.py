@@ -160,17 +160,18 @@ def test_common_args_preserve_optional_settings(
     )
 
     args = build_common_no_cmplog_args(config, paths)
+    core_args = args[: -len(additional_flags)] if additional_flags else args
 
     assert args[:2] == ("-G", "4096")
     if memory is not None:
-        assert ("-m", str(memory)) in zip(args, args[1:])
+        assert ("-m", str(memory)) in zip(core_args, core_args[1:])
     else:
-        assert "-m" not in args
+        assert "-m" not in core_args
     if dictionary is not None:
-        assert ("-x", str(dictionary)) in zip(args, args[1:])
+        assert ("-x", str(dictionary)) in zip(core_args, core_args[1:])
     else:
-        assert "-x" not in args
-    assert ("-z" in args) is skip_deterministic
+        assert "-x" not in core_args
+    assert ("-z" in core_args) is skip_deterministic
     if additional_flags:
         assert args[-len(additional_flags) :] == additional_flags
 
@@ -184,21 +185,27 @@ def test_asan_args_scale_timeout(timeout: int, scale: int) -> None:
 
     args = build_asan_args(config, relative_paths())
 
-    assert args[2:4] == ("-t", str(timeout * scale))
+    timeout_index = args.index("-t")
+    assert args[timeout_index : timeout_index + 2] == ("-t", str(timeout * scale))
 
 
 @given(
     timeout=st.integers(min_value=0, max_value=1_000_000),
     scale=st.integers(min_value=0, max_value=100),
+    memory=st.none() | st.integers(min_value=0, max_value=1_000_000),
 )
-def test_asan_args_scale_timeout_property(
-    timeout: int, scale: int
-) -> None:
+def test_asan_args_scale_timeout_property(timeout: int, scale: int, memory: int | None) -> None:
     config = EngineConfig(
         timeout_ms=timeout,
         asan_timeout_scale=scale,
+        memory_limit_asan_mb=memory,
     )
 
     args = build_asan_args(config, relative_paths())
 
-    assert args[2:4] == ("-t", str(timeout * scale))
+    timeout_index = args.index("-t")
+    assert args[timeout_index : timeout_index + 2] == ("-t", str(timeout * scale))
+    if memory is None:
+        assert "-m" not in args
+    else:
+        assert ("-m", str(memory)) in zip(args, args[1:])

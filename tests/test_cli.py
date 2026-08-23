@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -309,4 +310,19 @@ def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
     with patch("afl_run.cli._run_campaign_with_signals", new=AsyncMock()) as campaign:
         asyncio.run(_run_campaign(cfg, paths, timeout=1.5))
 
-    campaign.assert_awaited_once_with(cfg, paths, False)
+    campaign.assert_awaited_once_with(cfg, paths, False, 1.5)
+
+
+def test_run_campaign_registers_and_removes_interrupt_signals(tmp_path: Path) -> None:
+    cfg, paths = _config(tmp_path)
+    loop = MagicMock()
+
+    with (
+        patch("afl_run.cli.asyncio.get_running_loop", return_value=loop),
+        patch("afl_run.cli._run_campaign_with_signals", new=AsyncMock()),
+    ):
+        asyncio.run(_run_campaign(cfg, paths))
+
+    expected = [signal.SIGINT, signal.SIGTERM, signal.SIGHUP]
+    assert [call.args[0] for call in loop.add_signal_handler.call_args_list] == expected
+    assert [call.args[0] for call in loop.remove_signal_handler.call_args_list] == expected
