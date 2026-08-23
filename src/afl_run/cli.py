@@ -47,9 +47,9 @@ def main(config_path: str, timeout: float | None, fresh: bool, dry_run: bool) ->
         resolved = resolve_paths(config)
     except ValueError as error:
         raise click.ClickException(str(error)) from error
+    if dry_run and fresh:
+        raise click.ClickException("--dry-run cannot be combined with --fresh")
     if dry_run:
-        if fresh:
-            raise click.ClickException("--dry-run cannot be combined with --fresh")
         _print_dry_run(config, resolved)
         return
     try:
