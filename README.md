@@ -1,7 +1,6 @@
 # afl-run
 
-Python launcher for AFL++ fuzzing campaigns. Configuration is modelled with
-pydantic and supplied as JSON through a Click CLI.
+Run AFL++ fuzzing campaigns with a JSON configuration file.
 
 > This project is tailored to personal needs. Pull requests and new issues
 > are welcome, though.
@@ -61,9 +60,9 @@ configuration is rejected when `out_dir` equals or contains the configured
 seed, log, or AFL temporary directory.
 
 All paths must be supplied in the JSON configuration; no paths are derived or
-rewritten. The configuration layout is shown in the example below and defined
-by the pydantic models in `src/afl_run/config.py`. Environment variables for
-child `afl-fuzz` processes are key/value pairs under `env.variables`.
+rewritten. The configuration layout is shown in the example below. Environment
+variables for child `afl-fuzz` processes are key/value pairs under
+`env.variables`.
 
 `execution.n_workers` controls the number of standard worker instances. The
 master is always started separately. CmpLog, LAF, and ASAN instances are
