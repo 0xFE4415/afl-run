@@ -180,6 +180,48 @@ def test_cli_main(tmp_path: Path) -> None:
     run_campaign.assert_awaited_once()
 
 
+def test_cli_dry_run_prints_commands_without_starting_campaign(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    with patch("afl_run.cli.asyncio.run") as run_campaign:
+        result = CliRunner().invoke(main, ["--dry-run", str(config_path)])
+
+    assert result.exit_code == 0
+    assert "Dry run: no processes will be started." in result.output
+    assert "would start main: afl-fuzz" in result.output
+    assert "would start cmplog: afl-fuzz" in result.output
+    run_campaign.assert_not_called()
+
+
+def test_cli_dry_run_rejects_fresh(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    result = CliRunner().invoke(main, ["--dry-run", "--fresh", str(config_path)])
+
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output
+
+
+def test_cli_dry_run_prints_minimal_campaign(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    cfg.paths.cmplog = None
+    cfg.paths.laf = None
+    cfg.paths.asan_main = None
+    cfg.paths.dictionary = None
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    result = CliRunner().invoke(main, ["--dry-run", str(config_path)])
+
+    assert result.exit_code == 0
+    assert "would start main: afl-fuzz" in result.output
+    assert "would start cmplog" not in result.output
+
+
 def test_cli_reports_missing_path(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
     cfg.paths.main = str(tmp_path / "missing" / "afl_harness")

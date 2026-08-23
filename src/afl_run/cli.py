@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shlex
 import signal
 from pathlib import Path
 
@@ -28,6 +29,7 @@ MASTER_STARTUP_TIMEOUT_SECONDS = 30
 
 @click.command()
 @click.option("--fresh", is_flag=True, help="Remove existing campaign output before starting.")
+@click.option("--dry-run", is_flag=True, help="Print the campaign commands without starting them.")
 @click.option(
     "--timeout",
     type=click.FloatRange(min=0),
@@ -38,13 +40,18 @@ MASTER_STARTUP_TIMEOUT_SECONDS = 30
     "config_path",
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
-def main(config_path: str, timeout: float | None, fresh: bool) -> None:
+def main(config_path: str, timeout: float | None, fresh: bool, dry_run: bool) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
         config = Config.model_validate_json(Path(config_path).read_text())
         resolved = resolve_paths(config)
     except ValueError as error:
         raise click.ClickException(str(error)) from error
+    if dry_run:
+        if fresh:
+            raise click.ClickException("--dry-run cannot be combined with --fresh")
+        _print_dry_run(config, resolved)
+        return
     try:
         asyncio.run(_run_campaign(config, resolved, timeout, fresh))
     except asyncio.CancelledError:
@@ -53,6 +60,15 @@ def main(config_path: str, timeout: float | None, fresh: bool) -> None:
         LOGGER.info("campaign timed out")
     except (RuntimeError, ValueError, OSError) as error:
         raise click.ClickException(str(error)) from error
+
+
+def _print_dry_run(config: Config, resolved: ResolvedPaths) -> None:
+    click.echo("Dry run: no processes will be started.")
+    click.echo(f"would start main: {shlex.join(build_master_command(config, resolved))}")
+    if resolved.cmplog is not None:
+        click.echo(f"would start cmplog: {shlex.join(build_cmplog_command(config, resolved))}")
+    for name, command in build_worker_specs(config, resolved):
+        click.echo(f"would start {name}: {shlex.join(command)}")
 
 
 async def _run_campaign(
