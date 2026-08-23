@@ -55,6 +55,14 @@ timeout in seconds:
 afl-run --timeout 3600.5 config.json
 ```
 
+Use `--dry-run` to validate the configuration and print the commands without
+starting a campaign. It follows the same campaign setup path without launching
+processes:
+
+```sh
+afl-run --dry-run config.json
+```
+
 Use `--fresh` to remove the existing campaign output before starting. The
 configuration is rejected when `out_dir` equals or contains the configured
 seed, log, or AFL temporary directory.

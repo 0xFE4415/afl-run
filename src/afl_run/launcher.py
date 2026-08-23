@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import shlex
 import subprocess
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
@@ -31,6 +32,20 @@ class AsyncProcess(ProcessLike, Protocol):
     async def wait(self) -> int: ...
 
 
+class _DryRunProcess:
+    pid = -1
+    returncode = 0
+
+    def terminate(self) -> None:
+        return None
+
+    def kill(self) -> None:
+        return None
+
+    async def wait(self) -> int:
+        return 0
+
+
 @dataclass(frozen=True)
 class FuzzerProcess:
     name: str
@@ -44,8 +59,9 @@ class FuzzerProcess:
 
 
 class FuzzerGroup:
-    def __init__(self, fuzzers: Iterable[FuzzerProcess] = ()) -> None:
+    def __init__(self, fuzzers: Iterable[FuzzerProcess] = (), *, dry_run: bool = False) -> None:
         self._fuzzers = list(fuzzers)
+        self._dry_run = dry_run
 
     @property
     def fuzzers(self) -> tuple[FuzzerProcess, ...]:
@@ -71,12 +87,37 @@ class FuzzerGroup:
         tmp_root: Path | None = None,
         append: bool = False,
     ) -> FuzzerProcess:
-        fuzzer = await launch_fuzzer(command, name, log_dir, environment, tmp_root, append)
+        if self._dry_run:
+            LOGGER.info("would start %s: %s", name, shlex.join(command))
+            fuzzer = FuzzerProcess(
+                name,
+                _DryRunProcess(),
+                log_dir / f"{name}.log",
+                io.BytesIO(),
+            )
+        else:
+            fuzzer = await launch_fuzzer(command, name, log_dir, environment, tmp_root, append)
         self._fuzzers.append(fuzzer)
         return fuzzer
 
     async def abort_if_any_died(self) -> None:
+        if self._dry_run:
+            return
         await _abort_if_any_died(self.fuzzers)
+
+    async def wait_for_master(
+        self,
+        stats_path: Path,
+        master: ProcessLike,
+        waiter: Callable[[Path, ProcessLike], None],
+        timeout: float,
+    ) -> None:
+        if self._dry_run:
+            return
+        await asyncio.wait_for(
+            asyncio.to_thread(waiter, stats_path, master),
+            timeout=timeout,
+        )
 
 
 async def launch_fuzzer(

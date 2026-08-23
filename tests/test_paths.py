@@ -180,6 +180,49 @@ def test_cli_main(tmp_path: Path) -> None:
     run_campaign.assert_awaited_once()
 
 
+def test_cli_dry_run_runs_shared_campaign_path(tmp_path: Path, caplog) -> None:
+    caplog.set_level("INFO")
+    cfg = _valid_config(tmp_path)
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    result = CliRunner().invoke(main, ["--dry-run", str(config_path)])
+
+    assert result.exit_code == 0
+    assert "would start main: afl-fuzz" in caplog.text
+    assert "would start cmplog: afl-fuzz" in caplog.text
+
+
+def test_cli_dry_run_accepts_fresh_without_modifying_output(tmp_path: Path) -> None:
+    cfg = _valid_config(tmp_path)
+    existing = Path(cfg.paths.out_dir) / "existing.txt"
+    existing.write_text("keep")
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    result = CliRunner().invoke(main, ["--dry-run", "--fresh", str(config_path)])
+
+    assert result.exit_code == 0
+    assert existing.read_text() == "keep"
+
+
+def test_cli_dry_run_prints_minimal_campaign(tmp_path: Path, caplog) -> None:
+    caplog.set_level("INFO")
+    cfg = _valid_config(tmp_path)
+    cfg.paths.cmplog = None
+    cfg.paths.laf = None
+    cfg.paths.asan_main = None
+    cfg.paths.dictionary = None
+    config_path = tmp_path / "config.json"
+    config_path.write_text(cfg.model_dump_json())
+
+    result = CliRunner().invoke(main, ["--dry-run", str(config_path)])
+
+    assert result.exit_code == 0
+    assert "would start main: afl-fuzz" in caplog.text
+    assert "would start cmplog" not in caplog.text
+
+
 def test_cli_reports_missing_path(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path)
     cfg.paths.main = str(tmp_path / "missing" / "afl_harness")

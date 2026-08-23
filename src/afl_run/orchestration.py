@@ -65,6 +65,17 @@ def build_worker_specs(
     return tuple(specs)
 
 
+def build_campaign_specs(
+    config: Config,
+    paths: ResolvedPaths,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    specs = [(MASTER_NAME, build_master_command(config, paths))]
+    if paths.cmplog is not None:
+        specs.append(("cmplog", build_cmplog_command(config, paths)))
+    specs.extend(build_worker_specs(config, paths))
+    return tuple(specs)
+
+
 def _build_standard_command(
     config: Config,
     paths: ResolvedPaths,

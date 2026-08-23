@@ -13,9 +13,7 @@ from afl_run.host import configure_host
 from afl_run.launcher import FuzzerGroup
 from afl_run.orchestration import (
     MASTER_NAME,
-    build_cmplog_command,
-    build_master_command,
-    build_worker_specs,
+    build_campaign_specs,
     reset_output_directory,
     wait_for_master,
 )
@@ -28,6 +26,7 @@ MASTER_STARTUP_TIMEOUT_SECONDS = 30
 
 @click.command()
 @click.option("--fresh", is_flag=True, help="Remove existing campaign output before starting.")
+@click.option("--dry-run", is_flag=True, help="Print the campaign commands without starting them.")
 @click.option(
     "--timeout",
     type=click.FloatRange(min=0),
@@ -38,7 +37,7 @@ MASTER_STARTUP_TIMEOUT_SECONDS = 30
     "config_path",
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
-def main(config_path: str, timeout: float | None, fresh: bool) -> None:
+def main(config_path: str, timeout: float | None, fresh: bool, dry_run: bool) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
         config = Config.model_validate_json(Path(config_path).read_text())
@@ -46,7 +45,7 @@ def main(config_path: str, timeout: float | None, fresh: bool) -> None:
     except ValueError as error:
         raise click.ClickException(str(error)) from error
     try:
-        asyncio.run(_run_campaign(config, resolved, timeout, fresh))
+        asyncio.run(_run_campaign(config, resolved, timeout, fresh, dry_run))
     except asyncio.CancelledError:
         LOGGER.info("campaign interrupted")
     except TimeoutError:
@@ -60,6 +59,7 @@ async def _run_campaign(
     resolved: ResolvedPaths,
     timeout: float | None = None,
     fresh: bool = False,
+    dry_run: bool = False,
 ) -> None:
     loop = asyncio.get_running_loop()
     task = asyncio.current_task()
@@ -68,7 +68,7 @@ async def _run_campaign(
         loop.add_signal_handler(signum, task.cancel)
 
     try:
-        campaign = _run_campaign_with_signals(config, resolved, fresh, timeout)
+        campaign = _run_campaign_with_signals(config, resolved, fresh, timeout, dry_run)
         await campaign
     finally:
         for signum in SHUTDOWN_SIGNALS:
@@ -76,46 +76,44 @@ async def _run_campaign(
 
 
 async def _run_campaign_with_signals(
-    config: Config, resolved: ResolvedPaths, fresh: bool, timeout: float | None = None
+    config: Config,
+    resolved: ResolvedPaths,
+    fresh: bool,
+    timeout: float | None = None,
+    dry_run: bool = False,
 ) -> None:
-    await asyncio.to_thread(configure_host, config.host)
-    tmp_root = resolved.afl_tmpdir
-    if fresh:
-        await asyncio.to_thread(reset_output_directory, resolved.out_dir)
+    if not dry_run:
+        await asyncio.to_thread(configure_host, config.host)
+        tmp_root = resolved.afl_tmpdir
+        if fresh:
+            await asyncio.to_thread(reset_output_directory, resolved.out_dir)
+        else:
+            resolved.out_dir.mkdir(parents=True, exist_ok=True)
     else:
-        resolved.out_dir.mkdir(parents=True, exist_ok=True)
+        tmp_root = None
 
     environment = build_environment(config)
     append_logs = not fresh
-    async with FuzzerGroup() as group:
+    async with FuzzerGroup(dry_run=dry_run) as group:
+        specs = build_campaign_specs(config, resolved)
+        master_name, master_command = specs[0]
         master = await group.launch(
-            build_master_command(config, resolved),
-            MASTER_NAME,
+            master_command,
+            master_name,
             resolved.log_dir,
             environment,
             tmp_root,
             append_logs,
         )
-        await asyncio.wait_for(
-            asyncio.to_thread(
-                wait_for_master,
-                resolved.out_dir / MASTER_NAME / "fuzzer_stats",
-                master.process,
-            ),
-            timeout=MASTER_STARTUP_TIMEOUT_SECONDS,
+        await group.wait_for_master(
+            resolved.out_dir / MASTER_NAME / "fuzzer_stats",
+            master.process,
+            wait_for_master,
+            MASTER_STARTUP_TIMEOUT_SECONDS,
         )
 
         async def run_campaign() -> None:
-            if resolved.cmplog is not None:
-                await group.launch(
-                    build_cmplog_command(config, resolved),
-                    "cmplog",
-                    resolved.log_dir,
-                    environment,
-                    tmp_root,
-                    append_logs,
-                )
-            for name, command in build_worker_specs(config, resolved):
+            for name, command in specs[1:]:
                 await group.launch(
                     command, name, resolved.log_dir, environment, tmp_root, append_logs
                 )
