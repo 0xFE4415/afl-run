@@ -115,4 +115,7 @@ async def _run_campaign_with_signals(
         for name, command in build_worker_specs(config, resolved):
             await group.launch(command, name, resolved.log_dir, environment, tmp_root, append_logs)
 
+        LOGGER.info("Monitor: afl-whatsup %s", resolved.out_dir)
+        LOGGER.info("Stop: press Ctrl-C")
+        LOGGER.info("Emergency stop: pkill afl-fuzz")
         await group.abort_if_any_died()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -53,7 +54,8 @@ def _fuzzer(name: str) -> FuzzerProcess:
     return FuzzerProcess(name, process, Path(f"{name}.log"), MagicMock())
 
 
-def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None:
+def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
     cfg, paths = _config(tmp_path, n_workers=3, optional=True)
     launched: list[str] = []
 
@@ -80,6 +82,9 @@ def test_run_campaign_launches_master_cmplog_and_workers(tmp_path: Path) -> None
     to_thread.assert_any_await(configure, cfg.host)
     to_thread.assert_any_await(prepare, paths.out_dir)
     assert launched == ["main", "cmplog", "s1", "s2", "s3", "laf", "asan1", "asan2"]
+    assert f"Monitor: afl-whatsup {paths.out_dir}" in caplog.text
+    assert "Stop: press Ctrl-C" in caplog.text
+    assert "Emergency stop: pkill afl-fuzz" in caplog.text
 
 
 def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Path) -> None:

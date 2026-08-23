@@ -138,6 +138,10 @@ On resume, an existing master `fuzzer_stats` file is treated as readiness for
 the master, so a stale file can hide a master startup failure until the normal
 fuzzer health check runs.
 
+While a campaign is running, press `Ctrl-C` to stop it gracefully. The runner
+prints an `afl-whatsup` monitoring command and `pkill afl-fuzz` as an emergency
+fallback after all fuzzer commands start.
+
 ### AFL++ Tuning
 
 Campaign-wide AFL++ tuning flags can be supplied as strings in
