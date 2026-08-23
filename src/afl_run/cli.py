@@ -22,6 +22,7 @@ from afl_run.orchestration import (
 from afl_run.paths import ResolvedPaths, resolve_paths
 
 LOGGER = logging.getLogger(__name__)
+SHUTDOWN_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 MASTER_STARTUP_TIMEOUT_SECONDS = 30
 
 
@@ -63,14 +64,14 @@ async def _run_campaign(
     loop = asyncio.get_running_loop()
     task = asyncio.current_task()
     assert task is not None
-    for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+    for signum in SHUTDOWN_SIGNALS:
         loop.add_signal_handler(signum, task.cancel)
 
     try:
         campaign = _run_campaign_with_signals(config, resolved, fresh, timeout)
         await campaign
     finally:
-        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        for signum in SHUTDOWN_SIGNALS:
             loop.remove_signal_handler(signum)
 
 
