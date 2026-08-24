@@ -103,7 +103,7 @@ Example:
     "max_input_length": 4096,
     "skip_deterministic": false,
     "asan_instances": 2,
-    "asan_timeout_scale": 2,
+    "asan_timeout_scale": 2.0,
     "afl_tmpdir": null,
     "additional_flags": []
   },

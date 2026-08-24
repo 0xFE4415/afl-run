@@ -146,6 +146,14 @@ def test_engine_rejects_negative_values(field: str) -> None:
         EngineConfig.model_validate({field: -1})
 
 
+@pytest.mark.parametrize("value", [2, 2.5])
+def test_asan_timeout_scale_accepts_int_and_float(value: int | float) -> None:
+    config = EngineConfig.model_validate({"asan_timeout_scale": value})
+
+    assert config.asan_timeout_scale == float(value)
+    assert isinstance(config.asan_timeout_scale, float)
+
+
 @pytest.mark.parametrize("value", ["0", "1", "2"])
 def test_host_accepts_valid_randomize_va_space(value: str) -> None:
     assert HostConfig(randomize_va_space=value).randomize_va_space == value

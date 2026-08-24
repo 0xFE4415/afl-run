@@ -29,7 +29,7 @@ class EngineConfig(BaseModel):
     max_input_length: int = Field(default=4096, ge=0)
     skip_deterministic: bool = False
     asan_instances: int = Field(default=2, ge=0)
-    asan_timeout_scale: int = Field(default=2, ge=0)
+    asan_timeout_scale: float = Field(default=2.0, ge=0)
     afl_tmpdir: str | None = Field(default=None, min_length=1)
     additional_flags: tuple[str, ...] = ()
 

@@ -73,14 +73,16 @@ def test_engine_args_omit_unconfigured_dictionary() -> None:
 
 
 def test_asan_args_use_scaled_timeout() -> None:
-    config = EngineConfig(asan_timeout_scale=3, memory_limit_asan_mb=0, skip_deterministic=True)
+    config = EngineConfig(
+        asan_timeout_scale=2.5, memory_limit_asan_mb=0, skip_deterministic=True
+    )
     assert build_asan_args(config, relative_paths()) == (
         "-G",
         "4096",
         "-m",
         "0",
         "-t",
-        "7500",
+        "6250",
         "-x",
         "dict",
         "-z",
@@ -178,23 +180,23 @@ def test_common_args_preserve_optional_settings(
 
 @given(
     timeout=st.integers(min_value=0, max_value=1_000_000),
-    scale=st.integers(min_value=0, max_value=100),
+    scale=st.floats(min_value=0, max_value=100),
 )
-def test_asan_args_scale_timeout(timeout: int, scale: int) -> None:
+def test_asan_args_scale_timeout(timeout: int, scale: float) -> None:
     config = EngineConfig(timeout_ms=timeout, asan_timeout_scale=scale)
 
     args = build_asan_args(config, relative_paths())
 
     timeout_index = args.index("-t")
-    assert args[timeout_index : timeout_index + 2] == ("-t", str(timeout * scale))
+    assert args[timeout_index : timeout_index + 2] == ("-t", str(round(timeout * scale)))
 
 
 @given(
     timeout=st.integers(min_value=0, max_value=1_000_000),
-    scale=st.integers(min_value=0, max_value=100),
+    scale=st.floats(min_value=0, max_value=100),
     memory=st.none() | st.integers(min_value=0, max_value=1_000_000),
 )
-def test_asan_args_scale_timeout_property(timeout: int, scale: int, memory: int | None) -> None:
+def test_asan_args_scale_timeout_property(timeout: int, scale: float, memory: int | None) -> None:
     config = EngineConfig(
         timeout_ms=timeout,
         asan_timeout_scale=scale,
@@ -204,7 +206,7 @@ def test_asan_args_scale_timeout_property(timeout: int, scale: int, memory: int 
     args = build_asan_args(config, relative_paths())
 
     timeout_index = args.index("-t")
-    assert args[timeout_index : timeout_index + 2] == ("-t", str(timeout * scale))
+    assert args[timeout_index : timeout_index + 2] == ("-t", str(round(timeout * scale)))
     if memory is None:
         assert "-m" not in args
     else:
