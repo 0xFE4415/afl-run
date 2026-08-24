@@ -105,17 +105,17 @@ class FuzzerGroup:
             return
         await _abort_if_any_died(self.fuzzers)
 
-    async def wait_for_master(
+    async def wait_for_main(
         self,
         stats_path: Path,
-        master: ProcessLike,
+        main: ProcessLike,
         waiter: Callable[[Path, ProcessLike], None],
         timeout: float,
     ) -> None:
         if self._dry_run:
             return
         await asyncio.wait_for(
-            asyncio.to_thread(waiter, stats_path, master),
+            asyncio.to_thread(waiter, stats_path, main),
             timeout=timeout,
         )
 

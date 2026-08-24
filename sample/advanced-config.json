@@ -22,7 +22,12 @@
     "asan_instances": 1,
     "asan_timeout_scale": 2.0,
     "afl_tmpdir": null,
-    "additional_flags": []
+    "additional_flags": [],
+    "flags": {
+      "main": ["-p", "explore"],
+      "cmplog": ["-L", "0"],
+      "worker": ["-p", "rare"]
+    }
   },
   "env": {
     "variables": {}

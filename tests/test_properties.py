@@ -72,6 +72,11 @@ def test_afl_tmpdir_rejects_nonexistent(path: str, tmp_path: Path) -> None:
         additional_flags=st.lists(
             st.from_regex(r"--?[a-z]{1,6}", fullmatch=True), max_size=3
         ).map(tuple),
+        flags=st.dictionaries(
+            st.sampled_from(["worker", "asan", "main"]),
+            st.lists(st.from_regex(r"--?[a-z]{1,6}", fullmatch=True), max_size=3).map(tuple),
+            max_size=3,
+        ),
     ),
     env=st.builds(
         EnvConfig,

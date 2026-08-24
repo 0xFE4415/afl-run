@@ -15,10 +15,10 @@ from afl_run.config import Config, EngineConfig, ExecutionConfig, PathConfig
 from afl_run.orchestration import (
     build_campaign_specs,
     build_cmplog_command,
-    build_master_command,
+    build_main_command,
     build_worker_specs,
     reset_output_directory,
-    wait_for_master,
+    wait_for_main,
 )
 
 
@@ -39,8 +39,8 @@ def _config() -> Config:
     )
 
 
-def test_build_master_command() -> None:
-    command = build_master_command(_config(), relative_paths())
+def test_build_main_command() -> None:
+    command = build_main_command(_config(), relative_paths())
     assert command == (
         "afl-fuzz",
         "-i",
@@ -108,8 +108,8 @@ def test_build_worker_specs() -> None:
     specs = build_worker_specs(config, paths)
 
     assert [command[-4:] for _, command in specs] == [
-        ("-S", "s1", "--", "main"),
-        ("-S", "s2", "--", "main"),
+        ("-S", "w1", "--", "main"),
+        ("-S", "w2", "--", "main"),
         ("-S", "laf", "--", "laf"),
         ("-S", "asan1", "--", "asan"),
         ("-S", "asan2", "--", "asan"),
@@ -124,14 +124,58 @@ def test_build_worker_specs_pairs_names_with_commands() -> None:
 
     specs = build_worker_specs(config, paths)
 
-    assert [name for name, _ in specs] == ["s1", "laf"]
+    assert [name for name, _ in specs] == ["w1", "laf"]
     assert [command[-4:] for _, command in specs] == [
-        ("-S", "s1", "--", "main"),
+        ("-S", "w1", "--", "main"),
         ("-S", "laf", "--", "laf"),
     ]
 
 
-def test_build_campaign_specs_orders_master_before_other_fuzzers() -> None:
+def test_main_command_includes_main_flags() -> None:
+    config = _config()
+    config.engine.flags = {"main": ("-p", "explore")}
+
+    command = build_main_command(config, relative_paths())
+
+    assert command[-6:] == ("-p", "explore", "-M", "main", "--", "main")
+
+
+def test_cmplog_command_includes_cmplog_flags() -> None:
+    config = _config()
+    config.engine.flags = {"cmplog": ("-L", "0")}
+
+    command = build_cmplog_command(config, relative_paths())
+
+    assert command[-6:] == ("-L", "0", "-S", "cmplog", "--", "main")
+
+
+def test_worker_flags_apply_role_then_instance() -> None:
+    config = _config()
+    config.execution.n_workers = 2
+    config.engine.flags = {"worker": ("-p", "rare"), "w2": ("-L", "0")}
+
+    specs = build_worker_specs(config, relative_paths())
+    commands = dict(specs)
+
+    assert commands["w1"][-6:] == ("-p", "rare", "-S", "w1", "--", "main")
+    assert commands["w2"][-8:] == ("-p", "rare", "-L", "0", "-S", "w2", "--", "main")
+
+
+def test_asan_flags_apply_role_then_instance() -> None:
+    config = _config()
+    config.engine.asan_instances = 2
+    config.engine.flags = {"asan": ("-p", "fast"), "asan2": ("-L", "0")}
+    paths = relative_paths()
+    paths.asan_main = Path("asan")
+
+    specs = build_worker_specs(config, paths)
+    commands = dict(specs)
+
+    assert commands["asan1"][-6:] == ("-p", "fast", "-S", "asan1", "--", "asan")
+    assert commands["asan2"][-8:] == ("-p", "fast", "-L", "0", "-S", "asan2", "--", "asan")
+
+
+def test_build_campaign_specs_orders_main_before_other_fuzzers() -> None:
     config = _config()
     config.execution.n_workers = 1
     paths = relative_paths()
@@ -139,7 +183,7 @@ def test_build_campaign_specs_orders_master_before_other_fuzzers() -> None:
 
     specs = build_campaign_specs(config, paths)
 
-    assert [name for name, _ in specs] == ["main", "cmplog", "s1", "laf"]
+    assert [name for name, _ in specs] == ["main", "cmplog", "w1", "laf"]
 
 
 @given(
@@ -167,7 +211,7 @@ def test_build_worker_specs_matches_configured_instances(
 
     specs = build_worker_specs(config, paths)
 
-    expected_names = [f"s{index}" for index in range(1, n_workers + 1)]
+    expected_names = [f"w{index}" for index in range(1, n_workers + 1)]
     expected_targets: list[Path] = [paths.main] * n_workers
     if laf_path is not None:
         expected_names.append("laf")
@@ -269,7 +313,7 @@ class _Process:
     pid = 123
 
 
-def test_wait_for_master_waits_until_stats_exists(tmp_path: Path) -> None:
+def test_wait_for_main_waits_until_stats_exists(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     notifier = _Notifier(stats)
     selector = _Selector(["filesystem", "filesystem"])
@@ -280,22 +324,22 @@ def test_wait_for_master_waits_until_stats_exists(tmp_path: Path) -> None:
         patch("afl_run.orchestration.os.pidfd_open", return_value=42),
         patch("afl_run.orchestration.os.close"),
     ):
-        wait_for_master(stats, _Process())
+        wait_for_main(stats, _Process())
 
     assert stats.is_file()
 
 
-def test_wait_for_master_returns_if_stats_already_exists(tmp_path: Path) -> None:
+def test_wait_for_main_returns_if_stats_already_exists(tmp_path: Path) -> None:
     stats = tmp_path / "fuzzer_stats"
     stats.write_text("")
 
     with patch("afl_run.orchestration.INotify") as notifier:
-        wait_for_master(stats, _Process())
+        wait_for_main(stats, _Process())
 
     notifier.assert_not_called()
 
 
-def test_wait_for_master_rechecks_after_installing_watch(tmp_path: Path) -> None:
+def test_wait_for_main_rechecks_after_installing_watch(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
     notifier = _Notifier(stats, create_on_watch=True)
@@ -304,13 +348,13 @@ def test_wait_for_master_rechecks_after_installing_watch(tmp_path: Path) -> None
         patch("afl_run.orchestration.INotify", return_value=notifier),
         patch("afl_run.orchestration.os.pidfd_open") as pidfd_open,
     ):
-        wait_for_master(stats, _Process())
+        wait_for_main(stats, _Process())
 
     pidfd_open.assert_not_called()
 
 
 @pytest.mark.parametrize("stats_exists", [True, False])
-def test_wait_for_master_handles_reaped_master(tmp_path: Path, stats_exists: bool) -> None:
+def test_wait_for_main_handles_reaped_main(tmp_path: Path, stats_exists: bool) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
 
@@ -324,13 +368,13 @@ def test_wait_for_master_handles_reaped_master(tmp_path: Path, stats_exists: boo
         patch("afl_run.orchestration.os.pidfd_open", side_effect=pidfd_open),
     ):
         if stats_exists:
-            wait_for_master(stats, _Process())
+            wait_for_main(stats, _Process())
         else:
-            with pytest.raises(RuntimeError, match="master exited before creating"):
-                wait_for_master(stats, _Process())
+            with pytest.raises(RuntimeError, match="main exited before creating"):
+                wait_for_main(stats, _Process())
 
 
-def test_wait_for_master_creates_missing_master_directory(tmp_path: Path) -> None:
+def test_wait_for_main_creates_missing_main_directory(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     script = (
         "import sys, time; "
@@ -340,14 +384,14 @@ def test_wait_for_master_creates_missing_master_directory(tmp_path: Path) -> Non
     process = subprocess.Popen([sys.executable, "-c", script, str(stats)])
 
     try:
-        wait_for_master(stats, process)
+        wait_for_main(stats, process)
     finally:
         process.wait(timeout=5)
 
     assert stats.is_file()
 
 
-def test_wait_for_master_raises_if_process_exits(tmp_path: Path) -> None:
+def test_wait_for_main_raises_if_process_exits(tmp_path: Path) -> None:
     selector = _Selector(["process"])
     with (
         patch("afl_run.orchestration.INotify"),
@@ -356,10 +400,10 @@ def test_wait_for_master_raises_if_process_exits(tmp_path: Path) -> None:
         patch("afl_run.orchestration.os.close"),
     ):
         with pytest.raises(RuntimeError):
-            wait_for_master(tmp_path / "fuzzer_stats", _Process())
+            wait_for_main(tmp_path / "fuzzer_stats", _Process())
 
 
-def test_wait_for_master_accepts_stats_created_with_process_event(tmp_path: Path) -> None:
+def test_wait_for_main_accepts_stats_created_with_process_event(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
 
@@ -374,4 +418,4 @@ def test_wait_for_master_accepts_stats_created_with_process_event(tmp_path: Path
         patch("afl_run.orchestration.os.pidfd_open", return_value=42),
         patch("afl_run.orchestration.os.close"),
     ):
-        wait_for_master(stats, _Process())
+        wait_for_main(stats, _Process())

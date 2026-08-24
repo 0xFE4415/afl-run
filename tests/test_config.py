@@ -206,6 +206,96 @@ def test_engine_rejects_blank_additional_flags(flags: tuple[str, ...]) -> None:
         EngineConfig(additional_flags=flags)
 
 
+def test_engine_accepts_flag_roles_and_instance_names() -> None:
+    config = EngineConfig.model_validate(
+        {
+            "flags": {
+                "main": ["-p", "explore"],
+                "cmplog": ["-L", "0"],
+                "w3": ["-p", "rare"],
+            }
+        }
+    )
+
+    assert config.flags == {
+        "main": ("-p", "explore"),
+        "cmplog": ("-L", "0"),
+        "w3": ("-p", "rare"),
+    }
+
+
+@pytest.mark.parametrize("key", ["bogus", "W1", "worker2", "", "main2"])
+def test_engine_rejects_unknown_flag_target(key: str) -> None:
+    with pytest.raises(ValidationError, match="flag"):
+        EngineConfig.model_validate({"flags": {key: ["-Z"]}})
+
+
+@pytest.mark.parametrize("flags", [["-Z", ""], ["  "]])
+def test_engine_rejects_blank_flag_items(flags: list[str]) -> None:
+    with pytest.raises(ValidationError, match="flags"):
+        EngineConfig.model_validate({"flags": {"main": flags}})
+
+
+def test_config_accepts_flags_for_configured_instances() -> None:
+    cfg = Config(
+        execution=ExecutionConfig(n_workers=3),
+        paths=PathConfig(
+            main="main",
+            cmplog="cmplog",
+            laf="laf",
+            asan_main="asan",
+            seeds_dir="seeds",
+            out_dir="out",
+        ),
+        engine=EngineConfig(
+            asan_instances=2,
+            flags={"w3": ("-p", "rare"), "laf": ("-Z",), "asan2": ("-p", "fast")},
+        ),
+    )
+
+    assert cfg.engine.flags["w3"] == ("-p", "rare")
+
+
+@pytest.mark.parametrize("key", ["w0", "w3"])
+def test_config_rejects_flags_for_unavailable_worker(key: str) -> None:
+    with pytest.raises(ValidationError, match="flags"):
+        Config(paths=minimal_path_config(), engine=EngineConfig(flags={key: ("-Z",)}))
+
+
+def test_config_rejects_cmplog_flags_without_harness() -> None:
+    with pytest.raises(ValidationError, match="cmplog"):
+        Config(
+            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out"),
+            engine=EngineConfig(flags={"cmplog": ("-L", "0")}),
+        )
+
+
+def test_config_rejects_laf_flags_without_harness() -> None:
+    with pytest.raises(ValidationError, match="laf"):
+        Config(
+            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out"),
+            engine=EngineConfig(flags={"laf": ("-Z",)}),
+        )
+
+
+def test_config_rejects_asan_flags_without_harness() -> None:
+    with pytest.raises(ValidationError, match="asan"):
+        Config(
+            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out"),
+            engine=EngineConfig(flags={"asan1": ("-p", "fast")}),
+        )
+
+
+def test_config_rejects_asan_flags_out_of_range() -> None:
+    with pytest.raises(ValidationError, match="flags"):
+        Config(
+            paths=PathConfig(
+                main="main", seeds_dir="seeds", out_dir="out", asan_main="asan"
+            ),
+            engine=EngineConfig(asan_instances=1, flags={"asan2": ("-p", "fast")}),
+        )
+
+
 @pytest.mark.parametrize("key", ["", "A=B", "A\x00B"])
 def test_env_rejects_invalid_variable_names(key: str) -> None:
     with pytest.raises(ValidationError, match="invalid environment variable name"):

@@ -12,16 +12,16 @@ from afl_run.environment import build_environment
 from afl_run.host import configure_host
 from afl_run.launcher import FuzzerGroup
 from afl_run.orchestration import (
-    MASTER_NAME,
+    MAIN_NAME,
     build_campaign_specs,
     reset_output_directory,
-    wait_for_master,
+    wait_for_main,
 )
 from afl_run.paths import ResolvedPaths, resolve_paths
 
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-MASTER_STARTUP_TIMEOUT_SECONDS = 30
+MAIN_STARTUP_TIMEOUT_SECONDS = 30
 
 
 @click.command()
@@ -96,20 +96,20 @@ async def _run_campaign_with_signals(
     append_logs = not fresh
     async with FuzzerGroup(dry_run=dry_run) as group:
         specs = build_campaign_specs(config, resolved)
-        master_name, master_command = specs[0]
-        master = await group.launch(
-            master_command,
-            master_name,
+        main_name, main_command = specs[0]
+        main = await group.launch(
+            main_command,
+            main_name,
             resolved.log_dir,
             environment,
             tmp_root,
             append_logs,
         )
-        await group.wait_for_master(
-            resolved.out_dir / MASTER_NAME / "fuzzer_stats",
-            master.process,
-            wait_for_master,
-            MASTER_STARTUP_TIMEOUT_SECONDS,
+        await group.wait_for_main(
+            resolved.out_dir / MAIN_NAME / "fuzzer_stats",
+            main.process,
+            wait_for_main,
+            MAIN_STARTUP_TIMEOUT_SECONDS,
         )
 
         async def run_campaign() -> None:

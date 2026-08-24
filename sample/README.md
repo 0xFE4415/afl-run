@@ -105,7 +105,7 @@ AFL_USE_ASAN=1 cmake --build sample/build-asan
 ```
 
 `advanced-config.json` starts one main instance, one CmpLog instance, one LAF
-instance, one ASAN instance, and two standard workers (`s1` and `s2`).
+instance, one ASAN instance, and two standard workers (`w1` and `w2`).
 
 ## 7. Run an advanced campaign
 
