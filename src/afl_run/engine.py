@@ -29,7 +29,7 @@ def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ..
         config,
         paths,
         include_cmplog=False,
-        timeout=config.timeout_ms * config.asan_timeout_scale,
+        timeout=round(config.timeout_ms * config.asan_timeout_scale),
         memory_limit=config.memory_limit_asan_mb,
     )
 
