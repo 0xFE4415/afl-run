@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
@@ -338,7 +340,7 @@ def test_wait_for_main_waits_until_stats_exists(tmp_path: Path) -> None:
         patch("afl_run.orchestration.os.pidfd_open", return_value=42),
         patch("afl_run.orchestration.os.close"),
     ):
-        wait_for_main(stats, _Process())
+        wait_for_main(stats, _Process(), time.time())
 
     assert stats.is_file()
 
@@ -346,9 +348,10 @@ def test_wait_for_main_waits_until_stats_exists(tmp_path: Path) -> None:
 def test_wait_for_main_returns_if_stats_already_exists(tmp_path: Path) -> None:
     stats = tmp_path / "fuzzer_stats"
     stats.write_text("")
+    since = time.time() - 1
 
     with patch("afl_run.orchestration.INotify") as notifier:
-        wait_for_main(stats, _Process())
+        wait_for_main(stats, _Process(), since)
 
     notifier.assert_not_called()
 
@@ -362,7 +365,7 @@ def test_wait_for_main_rechecks_after_installing_watch(tmp_path: Path) -> None:
         patch("afl_run.orchestration.INotify", return_value=notifier),
         patch("afl_run.orchestration.os.pidfd_open") as pidfd_open,
     ):
-        wait_for_main(stats, _Process())
+        wait_for_main(stats, _Process(), time.time())
 
     pidfd_open.assert_not_called()
 
@@ -381,11 +384,12 @@ def test_wait_for_main_handles_reaped_main(tmp_path: Path, stats_exists: bool) -
         patch("afl_run.orchestration.INotify"),
         patch("afl_run.orchestration.os.pidfd_open", side_effect=pidfd_open),
     ):
+        since = time.time() - 1
         if stats_exists:
-            wait_for_main(stats, _Process())
+            wait_for_main(stats, _Process(), since)
         else:
             with pytest.raises(RuntimeError, match="main exited before creating"):
-                wait_for_main(stats, _Process())
+                wait_for_main(stats, _Process(), since)
 
 
 def test_wait_for_main_creates_missing_main_directory(tmp_path: Path) -> None:
@@ -398,7 +402,7 @@ def test_wait_for_main_creates_missing_main_directory(tmp_path: Path) -> None:
     process = subprocess.Popen([sys.executable, "-c", script, str(stats)])
 
     try:
-        wait_for_main(stats, process)
+        wait_for_main(stats, process, time.time())
     finally:
         process.wait(timeout=5)
 
@@ -414,7 +418,7 @@ def test_wait_for_main_raises_if_process_exits(tmp_path: Path) -> None:
         patch("afl_run.orchestration.os.close"),
     ):
         with pytest.raises(RuntimeError):
-            wait_for_main(tmp_path / "fuzzer_stats", _Process())
+            wait_for_main(tmp_path / "fuzzer_stats", _Process(), time.time())
 
 
 def test_wait_for_main_accepts_stats_created_with_process_event(tmp_path: Path) -> None:
@@ -432,4 +436,42 @@ def test_wait_for_main_accepts_stats_created_with_process_event(tmp_path: Path) 
         patch("afl_run.orchestration.os.pidfd_open", return_value=42),
         patch("afl_run.orchestration.os.close"),
     ):
-        wait_for_main(stats, _Process())
+        wait_for_main(stats, _Process(), time.time())
+
+
+def test_wait_for_main_rejects_stale_stats_from_previous_run(tmp_path: Path) -> None:
+    stats = tmp_path / "main" / "fuzzer_stats"
+    stats.parent.mkdir()
+    stats.write_text("")
+    stale = time.time() - 3600
+    os.utime(stats, (stale, stale))
+    selector = _Selector(["process"])
+
+    with (
+        patch("afl_run.orchestration.INotify"),
+        patch("afl_run.orchestration.selectors.DefaultSelector", return_value=selector),
+        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
+        patch("afl_run.orchestration.os.close"),
+    ):
+        with pytest.raises(RuntimeError, match="main exited"):
+            wait_for_main(stats, _Process(), time.time())
+
+
+def test_wait_for_main_accepts_stats_refreshed_after_launch(tmp_path: Path) -> None:
+    stats = tmp_path / "main" / "fuzzer_stats"
+    stats.parent.mkdir()
+    stats.write_text("")
+    stale = time.time() - 3600
+    os.utime(stats, (stale, stale))
+    notifier = _Notifier(stats)
+    selector = _Selector(["filesystem", "filesystem"])
+
+    with (
+        patch("afl_run.orchestration.INotify", return_value=notifier),
+        patch("afl_run.orchestration.selectors.DefaultSelector", return_value=selector),
+        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
+        patch("afl_run.orchestration.os.close"),
+    ):
+        wait_for_main(stats, _Process(), time.time())
+
+    assert stats.stat().st_mtime > stale

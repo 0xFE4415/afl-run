@@ -146,9 +146,11 @@ host configuration instead.
 
 When `--fresh` is not supplied, existing per-fuzzer logs are appended to so
 that resumed campaigns retain earlier output. Fresh campaigns truncate logs.
-On resume, an existing main `fuzzer_stats` file is treated as readiness for
-the main instance, so a stale file can hide a main startup failure until the
-normal fuzzer health check runs.
+On resume, a leftover main `fuzzer_stats` file from the previous run is
+ignored: readiness requires the file to be rewritten after launch. While
+waiting, the runner monitors the main instance and reports slow startup
+(CPU time, RSS, log size) every 5 minutes; it aborts if the instance makes
+no progress for 5 minutes (for example, wedged on a kernel resource).
 
 While a campaign is running, press `Ctrl-C` to stop it gracefully. The runner
 prints an `afl-whatsup` monitoring command and `pkill afl-fuzz` as an emergency

@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
 import shlex
 import subprocess
+import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,9 @@ from typing import BinaryIO, Protocol, Self
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_TIMEOUT_SECONDS = 5
 STARTUP_WARNING_SECONDS = 30
+LIVENESS_PROBE_SECONDS = 15
+LIVENESS_LOG_SECONDS = 300
+STARTUP_STUCK_SECONDS = 300
 
 
 class ProcessLike(Protocol):
@@ -109,20 +114,98 @@ class FuzzerGroup:
     async def wait_for_main(
         self,
         stats_path: Path,
-        main: ProcessLike,
-        waiter: Callable[[Path, ProcessLike], None],
+        main: FuzzerProcess,
+        waiter: Callable[[Path, ProcessLike, float], None],
+        since: float,
     ) -> None:
         if self._dry_run:
             return
-        waiter_task = asyncio.ensure_future(asyncio.to_thread(waiter, stats_path, main))
-        done, _ = await asyncio.wait({waiter_task}, timeout=STARTUP_WARNING_SECONDS)
-        if not done:
+        waiter_task = asyncio.ensure_future(
+            asyncio.to_thread(waiter, stats_path, main.process, since)
+        )
+        monitor_task = asyncio.ensure_future(_monitor_main_startup(main.pid, main.log_path))
+        done, pending = await asyncio.wait(
+            {waiter_task, monitor_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        # The completed task's result() raises its exception, if any; a
+        # successful waiter takes priority over a watchdog failure.
+        if waiter_task in done:
+            waiter_task.result()
+        else:
+            monitor_task.result()
+
+
+async def _monitor_main_startup(pid: int, log_path: Path) -> None:
+    started = time.monotonic()
+    last_progress = started
+    warned_slow = False
+    next_liveness_log = LIVENESS_LOG_SECONDS
+    sample = _sample_liveness(pid, log_path)
+    while True:
+        elapsed = time.monotonic() - started
+        if not warned_slow and elapsed >= STARTUP_WARNING_SECONDS:
+            warned_slow = True
             LOGGER.warning(
                 "main instance startup is slow; no fuzzer_stats after %s seconds,"
                 " still waiting (large seed corpora take minutes to calibrate)",
                 STARTUP_WARNING_SECONDS,
             )
-        await waiter_task
+        if elapsed >= next_liveness_log:
+            next_liveness_log += LIVENESS_LOG_SECONDS
+            if sample is not None:
+                cpu_seconds, rss_bytes, log_bytes = sample
+                LOGGER.info(
+                    "main PID %d: CPU %.0fs, RSS %s, log %s — still calibrating"
+                    " (%.0fs elapsed)",
+                    pid,
+                    cpu_seconds,
+                    _format_size(rss_bytes),
+                    _format_size(log_bytes),
+                    elapsed,
+                )
+        await asyncio.sleep(LIVENESS_PROBE_SECONDS)
+        current = _sample_liveness(pid, log_path)
+        if current is None:
+            continue
+        if sample is None or current[0] > sample[0] or current[2] > sample[2]:
+            sample = current
+            last_progress = time.monotonic()
+        elif time.monotonic() - last_progress >= STARTUP_STUCK_SECONDS:
+            cpu_seconds, rss_bytes, log_bytes = current
+            raise RuntimeError(
+                f"main instance appears stuck: no CPU or log progress for"
+                f" {STARTUP_STUCK_SECONDS:.0f}s (PID {pid}, CPU {cpu_seconds:.0f}s,"
+                f" RSS {_format_size(rss_bytes)}, log {_format_size(log_bytes)});"
+                f" inspect {log_path} and /proc/{pid}/stack"
+            )
+
+
+def _sample_liveness(pid: int, log_path: Path) -> tuple[float, int, int] | None:
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as stat_file:
+            fields = stat_file.read().rsplit(b")", 1)[1].split()
+    except OSError:
+        return None
+    cpu_ticks = int(fields[11]) + int(fields[12]) + int(fields[13]) + int(fields[14])
+    try:
+        log_bytes = log_path.stat().st_size
+    except OSError:
+        log_bytes = 0
+    return (
+        cpu_ticks / os.sysconf("SC_CLK_TCK"),
+        int(fields[21]) * os.sysconf("SC_PAGE_SIZE"),
+        log_bytes,
+    )
+
+
+def _format_size(size_bytes: int) -> str:
+    if size_bytes >= 1024**3:
+        return f"{size_bytes / 1024**3:.1f}GB"
+    return f"{size_bytes / 1024**2:.1f}MB"
 
 
 async def launch_fuzzer(

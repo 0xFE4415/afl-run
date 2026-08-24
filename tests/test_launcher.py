@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,6 +14,9 @@ from afl_run.launcher import (
     FuzzerProcess,
     ProcessLike,
     _abort_if_any_died,
+    _format_size,
+    _monitor_main_startup,
+    _sample_liveness,
     launch_fuzzer,
 )
 
@@ -243,16 +247,26 @@ def test_abort_if_any_died_accepts_empty_group() -> None:
     asyncio.run(_abort_if_any_died(()))
 
 
+def _launch_probe() -> subprocess.Popen[bytes]:
+    return subprocess.Popen(
+        ["python3", "-c", "while True: pass"], close_fds=True
+    )
+
+
 def test_wait_for_main_warns_when_startup_is_slow(caplog) -> None:
     caplog.set_level(logging.WARNING, logger="afl_run.launcher")
+    fuzzer = FuzzerProcess("main", _process(), Path("main.log"), MagicMock())
 
-    def slow_waiter(stats_path: Path, main: ProcessLike) -> None:
+    def slow_waiter(stats_path: Path, main: ProcessLike, since: float) -> None:
         time.sleep(0.2)
 
     async def run() -> None:
         group = FuzzerGroup()
-        with patch("afl_run.launcher.STARTUP_WARNING_SECONDS", 0.05):
-            await group.wait_for_main(Path("stats"), _process(), slow_waiter)
+        with (
+            patch("afl_run.launcher.STARTUP_WARNING_SECONDS", 0.05),
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.01),
+        ):
+            await group.wait_for_main(Path("stats"), fuzzer, slow_waiter, 0.0)
 
     asyncio.run(run())
 
@@ -265,7 +279,11 @@ def test_wait_for_main_does_not_warn_on_fast_startup(caplog) -> None:
 
     async def run() -> None:
         group = FuzzerGroup()
-        await group.wait_for_main(Path("stats"), _process(), waiter)
+        await group.wait_for_main(
+            Path("stats"), FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
+            waiter,
+            0.0,
+        )
 
     asyncio.run(run())
 
@@ -274,15 +292,186 @@ def test_wait_for_main_does_not_warn_on_fast_startup(caplog) -> None:
 
 
 def test_wait_for_main_propagates_waiter_error() -> None:
-    def failing_waiter(stats_path: Path, main: ProcessLike) -> None:
+    def failing_waiter(stats_path: Path, main: ProcessLike, since: float) -> None:
         raise RuntimeError("main exited")
 
     async def run() -> None:
         group = FuzzerGroup()
-        await group.wait_for_main(Path("stats"), _process(), failing_waiter)
+        await group.wait_for_main(
+            Path("stats"), FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
+            failing_waiter,
+            0.0,
+        )
 
     with pytest.raises(RuntimeError, match="main exited"):
         asyncio.run(run())
+
+
+def test_wait_for_main_propagates_stuck_watchdog_error() -> None:
+    async def stuck_monitor(pid: int, log_path: Path) -> None:
+        raise RuntimeError("main instance appears stuck")
+
+    def slow_waiter(stats_path: Path, main: ProcessLike, since: float) -> None:
+        time.sleep(1)
+
+    async def run() -> None:
+        group = FuzzerGroup()
+        with patch("afl_run.launcher._monitor_main_startup", new=stuck_monitor):
+            await group.wait_for_main(
+                Path("stats"),
+                FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
+                slow_waiter,
+                0.0,
+            )
+
+    with pytest.raises(RuntimeError, match="appears stuck"):
+        asyncio.run(run())
+
+
+def test_monitor_flags_stuck_main(tmp_path: Path) -> None:
+    child = subprocess.Popen(["sleep", "30"])
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"")
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.02),
+            patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 0.1),
+        ):
+            await asyncio.wait_for(_monitor_main_startup(child.pid, log_path), timeout=5)
+
+    try:
+        with pytest.raises(RuntimeError, match="appears stuck"):
+            asyncio.run(run())
+    finally:
+        child.terminate()
+        child.wait()
+
+
+def test_monitor_allows_progressing_main(tmp_path: Path) -> None:
+    child = _launch_probe()
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"")
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.02),
+            patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 0.15),
+        ):
+            await asyncio.wait_for(_monitor_main_startup(child.pid, log_path), timeout=0.4)
+
+    try:
+        with pytest.raises(TimeoutError):
+            asyncio.run(run())
+    finally:
+        child.kill()
+        child.wait()
+
+
+def test_monitor_logs_liveness(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO, logger="afl_run.launcher")
+    child = subprocess.Popen(["sleep", "30"])
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"abc")
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.01),
+            patch("afl_run.launcher.LIVENESS_LOG_SECONDS", 0.05),
+            patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 999),
+        ):
+            await asyncio.wait_for(_monitor_main_startup(child.pid, log_path), timeout=0.3)
+
+    try:
+        with pytest.raises(TimeoutError):
+            asyncio.run(run())
+    finally:
+        child.terminate()
+        child.wait()
+
+    assert "still calibrating" in caplog.text
+
+
+def test_monitor_tolerates_unreadable_proc(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"")
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.01),
+            patch("afl_run.launcher.LIVENESS_LOG_SECONDS", 0.05),
+        ):
+            await asyncio.wait_for(_monitor_main_startup(-1, log_path), timeout=0.2)
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(run())
+
+
+def test_monitor_counts_log_growth_as_progress(tmp_path: Path) -> None:
+    child = subprocess.Popen(["sleep", "30"])
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"")
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.05),
+            patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 0.2),
+        ):
+            monitor = asyncio.ensure_future(_monitor_main_startup(child.pid, log_path))
+            for _ in range(6):
+                await asyncio.sleep(0.05)
+                with log_path.open("ab") as log_file:
+                    log_file.write(b"x")
+            monitor.cancel()
+            await asyncio.gather(monitor, return_exceptions=True)
+
+    try:
+        asyncio.run(run())
+    finally:
+        child.terminate()
+        child.wait()
+
+
+def test_sample_liveness_reads_proc_and_log(tmp_path: Path) -> None:
+    child = subprocess.Popen(["sleep", "30"])
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"abc")
+
+    try:
+        sample = _sample_liveness(child.pid, log_path)
+    finally:
+        child.terminate()
+        child.wait()
+
+    assert sample is not None
+    assert sample[0] >= 0
+    assert sample[1] > 0
+    assert sample[2] == 3
+
+
+def test_sample_liveness_returns_none_for_missing_process(tmp_path: Path) -> None:
+    assert _sample_liveness(-1, tmp_path / "main.log") is None
+
+
+def test_sample_liveness_handles_missing_log(tmp_path: Path) -> None:
+    child = subprocess.Popen(["sleep", "30"])
+
+    try:
+        sample = _sample_liveness(child.pid, tmp_path / "missing.log")
+    finally:
+        child.terminate()
+        child.wait()
+
+    assert sample is not None
+    assert sample[2] == 0
+
+
+@pytest.mark.parametrize(
+    ("size_bytes", "expected"),
+    [(45 * 1024 * 1024, "45.0MB"), (2_684_354_560, "2.5GB")],
+)
+def test_format_size(size_bytes: int, expected: str) -> None:
+    assert _format_size(size_bytes) == expected
 
 
 def test_fuzzer_group_cancels_other_waiters() -> None:

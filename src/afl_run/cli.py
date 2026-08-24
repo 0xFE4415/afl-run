@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+import time
 from pathlib import Path
 
 import click
@@ -96,6 +97,7 @@ async def _run_campaign_with_signals(
     async with FuzzerGroup(dry_run=dry_run) as group:
         specs = build_campaign_specs(config, resolved)
         main_name, main_command = specs[0]
+        launch_started = time.time()
         main = await group.launch(
             main_command,
             main_name,
@@ -106,8 +108,9 @@ async def _run_campaign_with_signals(
         )
         await group.wait_for_main(
             resolved.out_dir / MAIN_NAME / "fuzzer_stats",
-            main.process,
+            main,
             wait_for_main,
+            launch_started,
         )
 
         async def run_campaign() -> None:
