@@ -161,6 +161,20 @@ def test_worker_flags_apply_role_then_instance() -> None:
     assert commands["w2"][-8:] == ("-p", "rare", "-L", "0", "-S", "w2", "--", "main")
 
 
+def test_worker_role_does_not_apply_to_laf() -> None:
+    config = _config()
+    config.execution.n_workers = 1
+    config.engine.flags = {"worker": ("-p", "rare"), "laf": ("-p", "seek")}
+    paths = relative_paths()
+    paths.laf = Path("laf")
+
+    specs = build_worker_specs(config, paths)
+    commands = dict(specs)
+
+    assert commands["w1"][-6:] == ("-p", "rare", "-S", "w1", "--", "main")
+    assert commands["laf"][-6:] == ("-p", "seek", "-S", "laf", "--", "laf")
+
+
 def test_asan_flags_apply_role_then_instance() -> None:
     config = _config()
     config.engine.asan_instances = 2

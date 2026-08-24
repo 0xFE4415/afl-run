@@ -164,10 +164,11 @@ through `env.variables`.
 
 Per-fuzzer flags are supplied as lists of strings in `engine.flags`, keyed by
 either a role or a concrete fuzzer name. Roles apply to every instance of that
-kind: `worker` (all `w1`..`wn` workers and the `laf` instance) and `asan` (all
-`asan1`..`asanN` instances). Concrete names (`main`, `cmplog`, `laf`, `w1`,
-`asan2`, ...) target a single fuzzer. Flags are appended after
-`additional_flags`, with role flags before instance flags, so the final order
-is common, role, instance. Referencing a fuzzer that is not configured (for
-example `w3` when `n_workers` is 2, or `cmplog` without a CmpLog harness) is
-rejected.
+kind: `worker` (all `w1`..`wn` workers) and `asan` (all `asan1`..`asanN`
+instances). Concrete names (`main`, `cmplog`, `laf`, `w1`, `asan2`, ...) target
+a single fuzzer. The categories are independent: for example `worker` flags do
+not apply to the `laf`, `main`, or `cmplog` fuzzer or to ASAN instances. Flags
+are appended after `additional_flags`, with role flags before instance flags,
+so the final order is common, role, instance. Referencing a fuzzer that is not
+configured (for example `w3` when `n_workers` is 2, or `cmplog` without a
+CmpLog harness) is rejected.

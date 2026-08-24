@@ -57,7 +57,7 @@ def build_worker_specs(
         args = common_args + build_instance_flags(config.engine, "worker", name)
         specs.append((name, _build_fuzzer_command(paths, args, "-S", name, paths.main)))
     if paths.laf is not None:
-        args = common_args + build_instance_flags(config.engine, "worker", "laf")
+        args = common_args + build_instance_flags(config.engine, None, "laf")
         specs.append(("laf", _build_fuzzer_command(paths, args, "-S", "laf", paths.laf)))
     if paths.asan_main is not None:
         asan_args = build_asan_args(config.engine, paths)
