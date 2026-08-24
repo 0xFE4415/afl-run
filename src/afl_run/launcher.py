@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from types import TracebackType
-from typing import BinaryIO, Protocol, Self
+from typing import BinaryIO, NamedTuple, Protocol, Self
 
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_TIMEOUT_SECONDS = 5
@@ -139,6 +139,12 @@ class FuzzerGroup:
             monitor_task.result()
 
 
+class _LivenessSample(NamedTuple):
+    cpu_seconds: float
+    rss_bytes: int
+    log_bytes: int
+
+
 async def _monitor_main_startup(pid: int, log_path: Path) -> None:
     started = time.monotonic()
     last_progress = started
@@ -157,34 +163,38 @@ async def _monitor_main_startup(pid: int, log_path: Path) -> None:
         if elapsed >= next_liveness_log:
             next_liveness_log += LIVENESS_LOG_SECONDS
             if sample is not None:
-                cpu_seconds, rss_bytes, log_bytes = sample
                 LOGGER.info(
                     "main PID %d: CPU %.0fs, RSS %s, log %s — still calibrating"
                     " (%.0fs elapsed)",
                     pid,
-                    cpu_seconds,
-                    _format_size(rss_bytes),
-                    _format_size(log_bytes),
+                    sample.cpu_seconds,
+                    _format_size(sample.rss_bytes),
+                    _format_size(sample.log_bytes),
                     elapsed,
                 )
         await asyncio.sleep(LIVENESS_PROBE_SECONDS)
         current = _sample_liveness(pid, log_path)
         if current is None:
             continue
-        if sample is None or current[0] > sample[0] or current[2] > sample[2]:
+        progressed = (
+            sample is None
+            or current.cpu_seconds > sample.cpu_seconds
+            or current.log_bytes > sample.log_bytes
+        )
+        if progressed:
             sample = current
             last_progress = time.monotonic()
         elif time.monotonic() - last_progress >= STARTUP_STUCK_SECONDS:
-            cpu_seconds, rss_bytes, log_bytes = current
             raise RuntimeError(
                 f"main instance appears stuck: no CPU or log progress for"
-                f" {STARTUP_STUCK_SECONDS:.0f}s (PID {pid}, CPU {cpu_seconds:.0f}s,"
-                f" RSS {_format_size(rss_bytes)}, log {_format_size(log_bytes)});"
+                f" {STARTUP_STUCK_SECONDS:.0f}s (PID {pid},"
+                f" CPU {current.cpu_seconds:.0f}s, RSS {_format_size(current.rss_bytes)},"
+                f" log {_format_size(current.log_bytes)});"
                 f" inspect {log_path} and /proc/{pid}/stack"
             )
 
 
-def _sample_liveness(pid: int, log_path: Path) -> tuple[float, int, int] | None:
+def _sample_liveness(pid: int, log_path: Path) -> _LivenessSample | None:
     try:
         with open(f"/proc/{pid}/stat", "rb") as stat_file:
             fields = stat_file.read().rsplit(b")", 1)[1].split()
@@ -195,10 +205,10 @@ def _sample_liveness(pid: int, log_path: Path) -> tuple[float, int, int] | None:
         log_bytes = log_path.stat().st_size
     except OSError:
         log_bytes = 0
-    return (
-        cpu_ticks / os.sysconf("SC_CLK_TCK"),
-        int(fields[21]) * os.sysconf("SC_PAGE_SIZE"),
-        log_bytes,
+    return _LivenessSample(
+        cpu_seconds=cpu_ticks / os.sysconf("SC_CLK_TCK"),
+        rss_bytes=int(fields[21]) * os.sysconf("SC_PAGE_SIZE"),
+        log_bytes=log_bytes,
     )
 
 
