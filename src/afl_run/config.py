@@ -23,7 +23,7 @@ class PathConfig(BaseModel):
 
 
 _FLAG_ROLE_NAMES = frozenset({"worker", "asan"})
-_FLAG_TARGET_PATTERN = re.compile(r"(?:main|cmplog|laf|w[0-9]+|asan[0-9]+)")
+_FLAG_TARGET_PATTERN = re.compile(r"main|cmplog|laf|w[1-9][0-9]*|asan[1-9][0-9]*")
 
 
 def _reject_blank_flags(items: tuple[str, ...], label: str) -> tuple[str, ...]:

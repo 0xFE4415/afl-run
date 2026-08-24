@@ -224,7 +224,9 @@ def test_engine_accepts_flag_roles_and_instance_names() -> None:
     }
 
 
-@pytest.mark.parametrize("key", ["bogus", "W1", "worker2", "", "main2"])
+@pytest.mark.parametrize(
+    "key", ["bogus", "W1", "worker2", "", "main2", "w0", "w01", "asan0", "asan01"]
+)
 def test_engine_rejects_unknown_flag_target(key: str) -> None:
     with pytest.raises(ValidationError, match="flag"):
         EngineConfig.model_validate({"flags": {key: ["-Z"]}})
@@ -256,7 +258,7 @@ def test_config_accepts_flags_for_configured_instances() -> None:
     assert cfg.engine.flags["w3"] == ("-p", "rare")
 
 
-@pytest.mark.parametrize("key", ["w0", "w3"])
+@pytest.mark.parametrize("key", ["w3"])
 def test_config_rejects_flags_for_unavailable_worker(key: str) -> None:
     with pytest.raises(ValidationError, match="flags"):
         Config(paths=minimal_path_config(), engine=EngineConfig(flags={key: ("-Z",)}))
