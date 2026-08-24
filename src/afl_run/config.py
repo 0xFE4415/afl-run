@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Self
 
@@ -21,6 +22,17 @@ class PathConfig(BaseModel):
     dictionary: str | None = Field(default=None, min_length=1)
 
 
+_FLAG_ROLE_NAMES = frozenset({"worker", "asan"})
+_FLAG_TARGET_PATTERN = re.compile(r"main|cmplog|laf|w[1-9][0-9]*|asan[1-9][0-9]*")
+
+
+def _reject_blank_flags(items: tuple[str, ...], label: str) -> tuple[str, ...]:
+    for item in items:
+        if not item.strip():
+            raise ValueError(f"{label} must not contain blank items")
+    return items
+
+
 class EngineConfig(BaseModel):
     timeout_ms: int = Field(default=2500, ge=0)
     memory_limit_mb: int | None = Field(default=None, ge=0)
@@ -32,13 +44,20 @@ class EngineConfig(BaseModel):
     asan_timeout_scale: float = Field(default=2.0, ge=0)
     afl_tmpdir: str | None = Field(default=None, min_length=1)
     additional_flags: tuple[str, ...] = ()
+    flags: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
     @field_validator("additional_flags")
     @classmethod
     def reject_blank_flags(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        for flag in value:
-            if not flag.strip():
-                raise ValueError("additional_flags must not contain blank items")
+        return _reject_blank_flags(value, "additional_flags")
+
+    @field_validator("flags")
+    @classmethod
+    def validate_flags(cls, value: dict[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+        for name, items in value.items():
+            if name not in _FLAG_ROLE_NAMES and _FLAG_TARGET_PATTERN.fullmatch(name) is None:
+                raise ValueError(f"unknown flag target: {name!r}")
+            _reject_blank_flags(items, f"flags[{name!r}]")
         return value
 
 
@@ -86,5 +105,35 @@ class Config(BaseModel):
             if value is not None and Path(value).resolve().is_relative_to(out_dir):
                 raise ValueError(
                     f"out_dir {self.paths.out_dir!r} must not equal or contain {name} {value!r}"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def reject_unknown_flag_targets(self) -> Self:
+        for name in self.engine.flags:
+            if name in ("worker", "asan", "main"):
+                continue
+            if name == "cmplog":
+                if self.paths.cmplog is None:
+                    raise ValueError(
+                        "flags reference cmplog but no CmpLog harness is configured"
+                    )
+                continue
+            if name == "laf":
+                if self.paths.laf is None:
+                    raise ValueError("flags reference laf but no LAF harness is configured")
+                continue
+            if name.startswith("w"):
+                prefix, count, label = "w", self.execution.n_workers, "workers"
+            else:
+                prefix, count, label = "asan", self.engine.asan_instances, "ASAN instances"
+                if self.paths.asan_main is None:
+                    raise ValueError(
+                        f"flags reference {name!r} but no ASAN harness is configured"
+                    )
+            index = int(name.removeprefix(prefix))
+            if not 1 <= index <= count:
+                raise ValueError(
+                    f"flags reference {name!r} but {count} {label} are configured"
                 )
         return self

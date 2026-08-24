@@ -73,10 +73,10 @@ variables for child `afl-fuzz` processes are key/value pairs under
 `env.variables`.
 
 `execution.n_workers` controls the number of standard worker instances. The
-master is always started separately. CmpLog, LAF, and ASAN instances are
-started only when their corresponding paths are configured. For example, `0`
-with no optional paths starts only the master, while `4` starts the master plus
-workers `s1`, `s2`, `s3`, and `s4`.
+main instance is always started separately. CmpLog, LAF, and ASAN instances
+are started only when their corresponding paths are configured. For example,
+`0` with no optional paths starts only the main instance, while `4` starts the
+main instance plus workers `w1`, `w2`, `w3`, and `w4`.
 
 Example:
 
@@ -105,7 +105,12 @@ Example:
     "asan_instances": 2,
     "asan_timeout_scale": 2.0,
     "afl_tmpdir": null,
-    "additional_flags": []
+    "additional_flags": [],
+    "flags": {
+      "main": ["-p", "explore"],
+      "cmplog": ["-L", "0"],
+      "worker": ["-p", "rare"]
+    }
   },
   "env": {
     "variables": {
@@ -141,9 +146,9 @@ host configuration instead.
 
 When `--fresh` is not supplied, existing per-fuzzer logs are appended to so
 that resumed campaigns retain earlier output. Fresh campaigns truncate logs.
-On resume, an existing master `fuzzer_stats` file is treated as readiness for
-the master, so a stale file can hide a master startup failure until the normal
-fuzzer health check runs.
+On resume, an existing main `fuzzer_stats` file is treated as readiness for
+the main instance, so a stale file can hide a main startup failure until the
+normal fuzzer health check runs.
 
 While a campaign is running, press `Ctrl-C` to stop it gracefully. The runner
 prints an `afl-whatsup` monitoring command and `pkill afl-fuzz` as an emergency
@@ -152,7 +157,18 @@ fallback after all fuzzer commands start.
 ### AFL++ Tuning
 
 Campaign-wide AFL++ tuning flags can be supplied as strings in
-`engine.additional_flags`. They are appended to every master, CmpLog, and
+`engine.additional_flags`. They are appended to every main, CmpLog, and
 worker command, for example `"additional_flags": ["-Z"]`. Environment-based
 options such as `AFL_FINAL_SYNC=1` and `AFL_TESTCACHE_SIZE` can be supplied
-through `env.variables`. Worker-specific tuning remains a future extension.
+through `env.variables`.
+
+Per-fuzzer flags are supplied as lists of strings in `engine.flags`, keyed by
+either a role or a concrete fuzzer name. Roles apply to every instance of that
+kind: `worker` (all `w1`..`wn` workers) and `asan` (all `asan1`..`asanN`
+instances). Concrete names (`main`, `cmplog`, `laf`, `w1`, `asan2`, ...) target
+a single fuzzer. The categories are independent: for example `worker` flags do
+not apply to the `laf`, `main`, or `cmplog` fuzzer or to ASAN instances. Flags
+are appended after `additional_flags`, with role flags before instance flags,
+so the final order is common, role, instance. Referencing a fuzzer that is not
+configured (for example `w3` when `n_workers` is 2, or `cmplog` without a
+CmpLog harness) is rejected.

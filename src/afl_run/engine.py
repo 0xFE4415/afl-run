@@ -34,6 +34,15 @@ def build_asan_args(config: EngineConfig, paths: ResolvedPaths) -> tuple[str, ..
     )
 
 
+def build_instance_flags(
+    config: EngineConfig,
+    role: str | None,
+    name: str,
+) -> tuple[str, ...]:
+    role_flags = config.flags.get(role, ()) if role is not None else ()
+    return role_flags + config.flags.get(name, ())
+
+
 def _build_args(
     config: EngineConfig,
     paths: ResolvedPaths,

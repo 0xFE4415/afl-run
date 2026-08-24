@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -10,6 +11,7 @@ import pytest
 from afl_run.launcher import (
     FuzzerGroup,
     FuzzerProcess,
+    ProcessLike,
     _abort_if_any_died,
     launch_fuzzer,
 )
@@ -239,6 +241,48 @@ def test_abort_if_any_died_reports_wait_errors() -> None:
 
 def test_abort_if_any_died_accepts_empty_group() -> None:
     asyncio.run(_abort_if_any_died(()))
+
+
+def test_wait_for_main_warns_when_startup_is_slow(caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="afl_run.launcher")
+
+    def slow_waiter(stats_path: Path, main: ProcessLike) -> None:
+        time.sleep(0.2)
+
+    async def run() -> None:
+        group = FuzzerGroup()
+        with patch("afl_run.launcher.STARTUP_WARNING_SECONDS", 0.05):
+            await group.wait_for_main(Path("stats"), _process(), slow_waiter)
+
+    asyncio.run(run())
+
+    assert "main instance startup is slow" in caplog.text
+
+
+def test_wait_for_main_does_not_warn_on_fast_startup(caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="afl_run.launcher")
+    waiter = MagicMock()
+
+    async def run() -> None:
+        group = FuzzerGroup()
+        await group.wait_for_main(Path("stats"), _process(), waiter)
+
+    asyncio.run(run())
+
+    waiter.assert_called_once()
+    assert "main instance startup is slow" not in caplog.text
+
+
+def test_wait_for_main_propagates_waiter_error() -> None:
+    def failing_waiter(stats_path: Path, main: ProcessLike) -> None:
+        raise RuntimeError("main exited")
+
+    async def run() -> None:
+        group = FuzzerGroup()
+        await group.wait_for_main(Path("stats"), _process(), failing_waiter)
+
+    with pytest.raises(RuntimeError, match="main exited"):
+        asyncio.run(run())
 
 
 def test_fuzzer_group_cancels_other_waiters() -> None:

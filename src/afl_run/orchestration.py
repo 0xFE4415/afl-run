@@ -13,34 +13,36 @@ from afl_run.engine import (
     build_asan_args,
     build_cmplog_args,
     build_common_no_cmplog_args,
+    build_instance_flags,
 )
 from afl_run.launcher import ProcessLike
 from afl_run.paths import ResolvedPaths
 
-MASTER_NAME = "main"
+MAIN_NAME = "main"
+CMPLOG_NAME = "cmplog"
 
 
-def build_master_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
-    return _build_standard_command(
-        config,
+def build_main_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
+    return _build_fuzzer_command(
         paths,
+        build_common_no_cmplog_args(config.engine, paths)
+        + build_instance_flags(config.engine, None, MAIN_NAME),
         "-M",
-        MASTER_NAME,
+        MAIN_NAME,
         paths.main,
-        include_cmplog=False,
     )
 
 
 def build_cmplog_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
     if paths.cmplog is None:
         raise ValueError("CmpLog harness is not configured")
-    return _build_standard_command(
-        config,
+    return _build_fuzzer_command(
         paths,
+        build_cmplog_args(config.engine, paths)
+        + build_instance_flags(config.engine, None, CMPLOG_NAME),
         "-S",
-        "cmplog",
+        CMPLOG_NAME,
         paths.main,
-        include_cmplog=True,
     )
 
 
@@ -51,16 +53,19 @@ def build_worker_specs(
     specs: list[tuple[str, tuple[str, ...]]] = []
     common_args = build_common_no_cmplog_args(config.engine, paths)
     for index in range(1, config.execution.n_workers + 1):
-        name = f"s{index}"
-        specs.append((name, _build_fuzzer_command(paths, common_args, "-S", name, paths.main)))
+        name = f"w{index}"
+        args = common_args + build_instance_flags(config.engine, "worker", name)
+        specs.append((name, _build_fuzzer_command(paths, args, "-S", name, paths.main)))
     if paths.laf is not None:
-        specs.append(("laf", _build_fuzzer_command(paths, common_args, "-S", "laf", paths.laf)))
+        args = common_args + build_instance_flags(config.engine, None, "laf")
+        specs.append(("laf", _build_fuzzer_command(paths, args, "-S", "laf", paths.laf)))
     if paths.asan_main is not None:
         asan_args = build_asan_args(config.engine, paths)
         for index in range(1, config.engine.asan_instances + 1):
             name = f"asan{index}"
+            args = asan_args + build_instance_flags(config.engine, "asan", name)
             specs.append(
-                (name, _build_fuzzer_command(paths, asan_args, "-S", name, paths.asan_main))
+                (name, _build_fuzzer_command(paths, args, "-S", name, paths.asan_main))
             )
     return tuple(specs)
 
@@ -69,28 +74,11 @@ def build_campaign_specs(
     config: Config,
     paths: ResolvedPaths,
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    specs = [(MASTER_NAME, build_master_command(config, paths))]
+    specs = [(MAIN_NAME, build_main_command(config, paths))]
     if paths.cmplog is not None:
-        specs.append(("cmplog", build_cmplog_command(config, paths)))
+        specs.append((CMPLOG_NAME, build_cmplog_command(config, paths)))
     specs.extend(build_worker_specs(config, paths))
     return tuple(specs)
-
-
-def _build_standard_command(
-    config: Config,
-    paths: ResolvedPaths,
-    instance_flag: str,
-    instance_name: str,
-    target: Path,
-    *,
-    include_cmplog: bool,
-) -> tuple[str, ...]:
-    args = (
-        build_cmplog_args(config.engine, paths)
-        if include_cmplog
-        else build_common_no_cmplog_args(config.engine, paths)
-    )
-    return _build_fuzzer_command(paths, args, instance_flag, instance_name, target)
 
 
 def _build_fuzzer_command(
@@ -126,9 +114,9 @@ def reset_output_directory(root: Path) -> None:
     root.mkdir(parents=True)
 
 
-def wait_for_master(
+def wait_for_main(
     stats_path: Path,
-    master: ProcessLike,
+    main: ProcessLike,
 ) -> None:
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     if stats_path.is_file():
@@ -144,11 +132,11 @@ def wait_for_master(
         if stats_path.is_file():
             return
         try:
-            pidfd = os.pidfd_open(master.pid)
+            pidfd = os.pidfd_open(main.pid)
         except ProcessLookupError:
             if stats_path.is_file():
                 return
-            raise RuntimeError(f"master exited before creating {stats_path}") from None
+            raise RuntimeError(f"main exited before creating {stats_path}") from None
         stack.callback(os.close, pidfd)
         _wait_for_events(stats_path, notifier, pidfd)
 
@@ -162,7 +150,7 @@ def _wait_for_events(stats_path: Path, notifier: INotify, pidfd: int) -> None:
                 if key.data == "process":
                     if stats_path.is_file():
                         return
-                    raise RuntimeError(f"master exited before creating {stats_path}")
+                    raise RuntimeError(f"main exited before creating {stats_path}")
                 notifier.read()
                 if stats_path.is_file():
                     return
