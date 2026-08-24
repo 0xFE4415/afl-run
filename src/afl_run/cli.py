@@ -21,7 +21,6 @@ from afl_run.paths import ResolvedPaths, resolve_paths
 
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-MAIN_STARTUP_TIMEOUT_SECONDS = 30
 
 
 @click.command()
@@ -109,7 +108,6 @@ async def _run_campaign_with_signals(
             resolved.out_dir / MAIN_NAME / "fuzzer_stats",
             main.process,
             wait_for_main,
-            MAIN_STARTUP_TIMEOUT_SECONDS,
         )
 
         async def run_campaign() -> None:

@@ -13,6 +13,7 @@ from typing import BinaryIO, Protocol, Self
 
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_TIMEOUT_SECONDS = 5
+STARTUP_WARNING_SECONDS = 30
 
 
 class ProcessLike(Protocol):
@@ -110,14 +111,18 @@ class FuzzerGroup:
         stats_path: Path,
         main: ProcessLike,
         waiter: Callable[[Path, ProcessLike], None],
-        timeout: float,
     ) -> None:
         if self._dry_run:
             return
-        await asyncio.wait_for(
-            asyncio.to_thread(waiter, stats_path, main),
-            timeout=timeout,
-        )
+        waiter_task = asyncio.ensure_future(asyncio.to_thread(waiter, stats_path, main))
+        done, _ = await asyncio.wait({waiter_task}, timeout=STARTUP_WARNING_SECONDS)
+        if not done:
+            LOGGER.warning(
+                "main instance startup is slow; no fuzzer_stats after %s seconds,"
+                " still waiting (large seed corpora take minutes to calibrate)",
+                STARTUP_WARNING_SECONDS,
+            )
+        await waiter_task
 
 
 async def launch_fuzzer(

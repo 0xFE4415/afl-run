@@ -110,8 +110,6 @@ class Config(BaseModel):
 
     @model_validator(mode="after")
     def reject_unknown_flag_targets(self) -> Self:
-        n_workers = self.execution.n_workers
-        asan_instances = self.engine.asan_instances
         for name in self.engine.flags:
             if name in ("worker", "asan", "main"):
                 continue
@@ -126,19 +124,16 @@ class Config(BaseModel):
                     raise ValueError("flags reference laf but no LAF harness is configured")
                 continue
             if name.startswith("w"):
-                index = int(name.removeprefix("w"))
-                if not 1 <= index <= n_workers:
+                prefix, count, label = "w", self.execution.n_workers, "workers"
+            else:
+                prefix, count, label = "asan", self.engine.asan_instances, "ASAN instances"
+                if self.paths.asan_main is None:
                     raise ValueError(
-                        f"flags reference {name!r} but {n_workers} workers are configured"
+                        f"flags reference {name!r} but no ASAN harness is configured"
                     )
-                continue
-            index = int(name.removeprefix("asan"))
-            if self.paths.asan_main is None:
+            index = int(name.removeprefix(prefix))
+            if not 1 <= index <= count:
                 raise ValueError(
-                    f"flags reference {name!r} but no ASAN harness is configured"
-                )
-            if not 1 <= index <= asan_instances:
-                raise ValueError(
-                    f"flags reference {name!r} but {asan_instances} ASAN instances are configured"
+                    f"flags reference {name!r} but {count} {label} are configured"
                 )
         return self
