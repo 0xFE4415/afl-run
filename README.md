@@ -34,6 +34,7 @@ nox -s test       # pytest only
 Or directly via the venv:
 
 ```sh
+uv sync --extra all
 uv run ruff check .
 uv run ty check --error all
 uv run pytest
