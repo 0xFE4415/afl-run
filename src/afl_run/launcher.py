@@ -153,35 +153,15 @@ async def _monitor_main_startup(pid: int, log_path: Path) -> None:
     sample = _sample_liveness(pid, log_path)
     while True:
         elapsed = time.monotonic() - started
-        if not warned_slow and elapsed >= STARTUP_WARNING_SECONDS:
-            warned_slow = True
-            LOGGER.warning(
-                "main instance startup is slow; no fuzzer_stats after %s seconds,"
-                " still waiting (large seed corpora take minutes to calibrate)",
-                STARTUP_WARNING_SECONDS,
-            )
+        warned_slow = _warn_if_startup_is_slow(elapsed, warned_slow)
         if elapsed >= next_liveness_log:
             next_liveness_log += LIVENESS_LOG_SECONDS
-            if sample is not None:
-                LOGGER.info(
-                    "main PID %d: CPU %.0fs, RSS %s, log %s — still calibrating"
-                    " (%.0fs elapsed)",
-                    pid,
-                    sample.cpu_seconds,
-                    _format_size(sample.rss_bytes),
-                    _format_size(sample.log_bytes),
-                    elapsed,
-                )
+            _log_liveness(pid, sample, elapsed)
         await asyncio.sleep(LIVENESS_PROBE_SECONDS)
         current = _sample_liveness(pid, log_path)
         if current is None:
             continue
-        progressed = (
-            sample is None
-            or current.cpu_seconds > sample.cpu_seconds
-            or current.log_bytes > sample.log_bytes
-        )
-        if progressed:
+        if _has_liveness_progressed(sample, current):
             sample = current
             last_progress = time.monotonic()
         elif time.monotonic() - last_progress >= STARTUP_STUCK_SECONDS:
@@ -194,10 +174,44 @@ async def _monitor_main_startup(pid: int, log_path: Path) -> None:
             )
 
 
+def _warn_if_startup_is_slow(elapsed: float, warned: bool) -> bool:
+    if warned or elapsed < STARTUP_WARNING_SECONDS:
+        return warned
+    LOGGER.warning(
+        "main instance startup is slow; no fuzzer_stats after %s seconds,"
+        " still waiting (large seed corpora take minutes to calibrate)",
+        STARTUP_WARNING_SECONDS,
+    )
+    return True
+
+
+def _log_liveness(pid: int, sample: _LivenessSample | None, elapsed: float) -> None:
+    if sample is None:
+        return
+    LOGGER.info(
+        "main PID %d: CPU %.0fs, RSS %s, log %s — still calibrating"
+        " (%.0fs elapsed)",
+        pid,
+        sample.cpu_seconds,
+        _format_size(sample.rss_bytes),
+        _format_size(sample.log_bytes),
+        elapsed,
+    )
+
+
+def _has_liveness_progressed(
+    previous: _LivenessSample | None, current: _LivenessSample
+) -> bool:
+    return (
+        previous is None
+        or current.cpu_seconds > previous.cpu_seconds
+        or current.log_bytes > previous.log_bytes
+    )
+
+
 def _sample_liveness(pid: int, log_path: Path) -> _LivenessSample | None:
     try:
-        with open(f"/proc/{pid}/stat", "rb") as stat_file:
-            fields = stat_file.read().rsplit(b")", 1)[1].split()
+        fields = Path(f"/proc/{pid}/stat").read_bytes().rsplit(b")", 1)[1].split()
     except OSError:
         return None
     cpu_ticks = int(fields[11]) + int(fields[12]) + int(fields[13]) + int(fields[14])

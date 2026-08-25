@@ -51,7 +51,7 @@ def _build_args(
     timeout: int,
     memory_limit: int | None,
 ) -> tuple[str, ...]:
-    args = (
+    args: tuple[str, ...] = (
         "-G",
         str(config.max_input_length),
     )

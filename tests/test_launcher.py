@@ -10,13 +10,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from afl_run.launcher import (
+    STARTUP_WARNING_SECONDS,
     FuzzerGroup,
     FuzzerProcess,
     ProcessLike,
     _abort_if_any_died,
     _format_size,
+    _has_liveness_progressed,
+    _LivenessSample,
+    _log_liveness,
     _monitor_main_startup,
     _sample_liveness,
+    _warn_if_startup_is_slow,
     launch_fuzzer,
 )
 
@@ -289,6 +294,48 @@ def test_wait_for_main_does_not_warn_on_fast_startup(caplog) -> None:
 
     waiter.assert_called_once()
     assert "main instance startup is slow" not in caplog.text
+
+
+def test_warn_if_startup_is_slow_warns_once(caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="afl_run.launcher")
+
+    assert _warn_if_startup_is_slow(STARTUP_WARNING_SECONDS, False) is True
+    assert _warn_if_startup_is_slow(STARTUP_WARNING_SECONDS, True) is True
+
+    assert caplog.text.count("main instance startup is slow") == 1
+
+
+def test_warn_if_startup_is_slow_keeps_false_before_threshold() -> None:
+    assert _warn_if_startup_is_slow(0, False) is False
+
+
+def test_log_liveness_skips_missing_sample(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="afl_run.launcher")
+
+    _log_liveness(1, None, 1)
+
+    assert "still calibrating" not in caplog.text
+
+
+def test_log_liveness_logs_sample(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="afl_run.launcher")
+
+    _log_liveness(1, _LivenessSample(2, 3 * 1024**2, 4 * 1024**2), 5)
+
+    assert "main PID 1: CPU 2s, RSS 3.0MB, log 4.0MB" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("previous", "current", "expected"),
+    [
+        (None, _LivenessSample(1, 1, 1), True),
+        (_LivenessSample(1, 1, 1), _LivenessSample(2, 1, 1), True),
+        (_LivenessSample(1, 1, 1), _LivenessSample(1, 1, 2), True),
+        (_LivenessSample(1, 1, 1), _LivenessSample(1, 1, 1), False),
+    ],
+)
+def test_has_liveness_progressed(previous, current, expected) -> None:
+    assert _has_liveness_progressed(previous, current) is expected
 
 
 def test_wait_for_main_propagates_waiter_error() -> None:
