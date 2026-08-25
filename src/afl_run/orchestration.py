@@ -20,6 +20,9 @@ from afl_run.paths import ResolvedPaths
 
 MAIN_NAME = "main"
 CMPLOG_NAME = "cmplog"
+# Filesystem timestamps can lag time.time() by a few milliseconds; tolerate
+# that skew when deciding whether fuzzer_stats was written after launch.
+STATS_MTIME_SKEW_SECONDS = 1.0
 
 
 def build_main_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
@@ -117,9 +120,11 @@ def reset_output_directory(root: Path) -> None:
 def wait_for_main(
     stats_path: Path,
     main: ProcessLike,
+    since: float,
 ) -> None:
     stats_path.parent.mkdir(parents=True, exist_ok=True)
-    if stats_path.is_file():
+    since -= STATS_MTIME_SKEW_SECONDS
+    if _stats_written_since(stats_path, since):
         return
 
     with ExitStack() as stack:
@@ -129,28 +134,42 @@ def wait_for_main(
             str(stats_path.parent),
             flags.CREATE | flags.MOVED_TO | flags.CLOSE_WRITE,
         )
-        if stats_path.is_file():
+        if _stats_written_since(stats_path, since):
             return
         try:
             pidfd = os.pidfd_open(main.pid)
         except ProcessLookupError:
-            if stats_path.is_file():
+            if _stats_written_since(stats_path, since):
                 return
             raise RuntimeError(f"main exited before creating {stats_path}") from None
         stack.callback(os.close, pidfd)
-        _wait_for_events(stats_path, notifier, pidfd)
+        _wait_for_events(stats_path, notifier, pidfd, since)
 
 
-def _wait_for_events(stats_path: Path, notifier: INotify, pidfd: int) -> None:
+def _stats_written_since(stats_path: Path, since: float) -> bool:
+    # A fuzzer_stats file left over from a previous run must not count as
+    # readiness for a resumed campaign.
+    try:
+        return stats_path.stat().st_mtime >= since
+    except OSError:
+        return False
+
+
+def _wait_for_events(
+    stats_path: Path,
+    notifier: INotify,
+    pidfd: int,
+    since: float,
+) -> None:
     with selectors.DefaultSelector() as selector:
         selector.register(notifier.fileno(), selectors.EVENT_READ, "filesystem")
         selector.register(pidfd, selectors.EVENT_READ, "process")
         while True:
             for key, _ in selector.select():
                 if key.data == "process":
-                    if stats_path.is_file():
+                    if _stats_written_since(stats_path, since):
                         return
                     raise RuntimeError(f"main exited before creating {stats_path}")
                 notifier.read()
-                if stats_path.is_file():
+                if _stats_written_since(stats_path, since):
                     return
