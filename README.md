@@ -20,23 +20,25 @@ uv pip install -e ".[all]"
 
 ## Development
 
-All linters, type checks and tests are orchestrated with nox:
+Formatting, linting, type checks and tests are orchestrated with nox. The
+formatter, linter and type checker all cover both `src` and `tests`:
 
 Markdownlint is required for all Markdown files and runs as part of CI.
 
 ```sh
-nox -s check      # ruff + ty (strict) + pytest + 100% branch coverage
-nox -s ruff       # ruff only
-nox -s ty         # ty (strict) only
-nox -s test       # pytest only
+nox -s check       # format + ruff + ty (strict) + pytest + 100% branch coverage
+nox -s format      # ruff formatter check for src and tests
+nox -s ruff        # ruff linter for src and tests
+nox -s ty          # ty (strict) type check for src and tests
+nox -s test        # pytest only
 ```
 
 Or directly via the venv:
 
 ```sh
-uv sync --extra all
-uv run ruff check .
-uv run ty check --error all
+uv run ruff format --check src tests
+uv run ruff check src tests
+uv run ty check --error all src tests
 uv run pytest
 ```
 
