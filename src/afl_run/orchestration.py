@@ -67,9 +67,7 @@ def build_worker_specs(
         for index in range(1, config.engine.asan_instances + 1):
             name = f"asan{index}"
             args = asan_args + build_instance_flags(config.engine, "asan", name)
-            specs.append(
-                (name, _build_fuzzer_command(paths, args, "-S", name, paths.asan_main))
-            )
+            specs.append((name, _build_fuzzer_command(paths, args, "-S", name, paths.asan_main)))
     return tuple(specs)
 
 

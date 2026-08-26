@@ -14,9 +14,7 @@ def configure_host(config: HostConfig) -> None:
         (RANDOMIZE_VA_SPACE, config.randomize_va_space),
         (CORE_PATTERN, config.core_pattern),
     )
-    changes = tuple(
-        (path, value) for path, value in settings if path.read_text().strip() != value
-    )
+    changes = tuple((path, value) for path, value in settings if path.read_text().strip() != value)
     if not changes:
         return
     _check_passwordless_sudo()

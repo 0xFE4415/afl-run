@@ -125,15 +125,15 @@ def test_run_campaign_end_to_end_with_stub_afl_fuzz(tmp_path: Path, monkeypatch)
     stub = tmp_path / "afl-fuzz"
     stub.write_text(
         "#!/bin/sh\n"
-        "while [ \"$#\" -gt 0 ]; do\n"
-        "  case \"$1\" in\n"
-        "    -o) out=\"$2\"; shift 2 ;;\n"
-        "    -M|-S) name=\"$2\"; shift 2 ;;\n"
+        'while [ "$#" -gt 0 ]; do\n'
+        '  case "$1" in\n'
+        '    -o) out="$2"; shift 2 ;;\n'
+        '    -M|-S) name="$2"; shift 2 ;;\n'
         "    *) shift ;;\n"
         "  esac\n"
         "done\n"
-        "mkdir -p \"$out/$name\"\n"
-        ": > \"$out/$name/fuzzer_stats\"\n"
+        'mkdir -p "$out/$name"\n'
+        ': > "$out/$name/fuzzer_stats"\n'
         "trap 'exit 0' TERM INT\n"
         "while :; do sleep 1; done\n"
     )
@@ -211,10 +211,10 @@ def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
     with (
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.build_environment", return_value={}),
-            patch(
-                "afl_run.orchestration.build_main_command",
-                side_effect=OSError("command failed"),
-            ),
+        patch(
+            "afl_run.orchestration.build_main_command",
+            side_effect=OSError("command failed"),
+        ),
         patch(
             "afl_run.cli.FuzzerGroup.__aexit__",
             new=AsyncMock(return_value=False),

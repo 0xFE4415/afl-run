@@ -99,9 +99,7 @@ def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path, caplog) -> None:
                 tmp_path / "tmp",
             )
         create.assert_awaited_once()
-        assert create.call_args.kwargs["env"]["AFL_TMPDIR"] == str(
-            tmp_path / "tmp" / "main"
-        )
+        assert create.call_args.kwargs["env"]["AFL_TMPDIR"] == str(tmp_path / "tmp" / "main")
         return result
 
     result = asyncio.run(run())
@@ -114,10 +112,14 @@ def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path, caplog) -> None:
 def test_launch_fuzzer_closes_log_when_start_fails(tmp_path: Path) -> None:
     async def run() -> None:
         log_file = MagicMock()
-        with patch(
-            "afl_run.launcher.asyncio.create_subprocess_exec",
-            new=AsyncMock(side_effect=OSError("failed")),
-        ), patch("pathlib.Path.open", return_value=log_file), pytest.raises(OSError):
+        with (
+            patch(
+                "afl_run.launcher.asyncio.create_subprocess_exec",
+                new=AsyncMock(side_effect=OSError("failed")),
+            ),
+            patch("pathlib.Path.open", return_value=log_file),
+            pytest.raises(OSError),
+        ):
             await launch_fuzzer(("afl-fuzz",), "main", tmp_path, {})
         log_file.close.assert_called_once_with()
 
@@ -253,9 +255,7 @@ def test_abort_if_any_died_accepts_empty_group() -> None:
 
 
 def _launch_probe() -> subprocess.Popen[bytes]:
-    return subprocess.Popen(
-        ["python3", "-c", "while True: pass"], close_fds=True
-    )
+    return subprocess.Popen(["python3", "-c", "while True: pass"], close_fds=True)
 
 
 def test_wait_for_main_warns_when_startup_is_slow(caplog) -> None:
@@ -285,7 +285,8 @@ def test_wait_for_main_does_not_warn_on_fast_startup(caplog) -> None:
     async def run() -> None:
         group = FuzzerGroup()
         await group.wait_for_main(
-            Path("stats"), FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
+            Path("stats"),
+            FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
             waiter,
             0.0,
         )
@@ -345,7 +346,8 @@ def test_wait_for_main_propagates_waiter_error() -> None:
     async def run() -> None:
         group = FuzzerGroup()
         await group.wait_for_main(
-            Path("stats"), FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
+            Path("stats"),
+            FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
             failing_waiter,
             0.0,
         )

@@ -99,9 +99,7 @@ def test_minimal_paths_leave_cmplog_unconfigured_without_dictionary(tmp_path: Pa
     main = _harness(tmp_path / "main")
     seeds = _dir(tmp_path / "seeds")
     out = tmp_path / "out"
-    cfg = Config(
-        paths=PathConfig(main=str(main), seeds_dir=str(seeds), out_dir=str(out))
-    )
+    cfg = Config(paths=PathConfig(main=str(main), seeds_dir=str(seeds), out_dir=str(out)))
 
     resolved = resolve_paths(cfg)
 
@@ -250,9 +248,7 @@ def test_cli_reports_out_dir_not_a_directory(tmp_path: Path) -> None:
 
 def test_cli_reports_overlapping_output_directory(tmp_path: Path) -> None:
     config_path = tmp_path / "config.json"
-    config_path.write_text(
-        '{"paths": {"main": "main", "seeds_dir": "out", "out_dir": "out"}}'
-    )
+    config_path.write_text('{"paths": {"main": "main", "seeds_dir": "out", "out_dir": "out"}}')
 
     result = CliRunner().invoke(main, [str(config_path)])
 

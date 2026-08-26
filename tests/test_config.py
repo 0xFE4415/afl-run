@@ -52,9 +52,7 @@ def test_out_dir_equal_to_seeds_dir_is_rejected() -> None:
 
 def test_out_dir_containing_seeds_dir_is_rejected() -> None:
     with pytest.raises(ValidationError, match="seeds_dir"):
-        Config(
-            paths=PathConfig(main="main", seeds_dir="campaign/seeds", out_dir="campaign")
-        )
+        Config(paths=PathConfig(main="main", seeds_dir="campaign/seeds", out_dir="campaign"))
 
 
 def test_out_dir_equal_to_log_dir_is_rejected() -> None:
@@ -210,9 +208,9 @@ def test_engine_accepts_flag_roles_and_instance_names() -> None:
     config = EngineConfig.model_validate(
         {
             "flags": {
-                "main": ["-p", "explore"],
-                "cmplog": ["-L", "0"],
-                "w3": ["-p", "rare"],
+                "main": ("-p", "explore"),
+                "cmplog": ("-L", "0"),
+                "w3": ("-p", "rare"),
             }
         }
     )
@@ -229,11 +227,11 @@ def test_engine_accepts_flag_roles_and_instance_names() -> None:
 )
 def test_engine_rejects_unknown_flag_target(key: str) -> None:
     with pytest.raises(ValidationError, match="flag"):
-        EngineConfig.model_validate({"flags": {key: ["-Z"]}})
+        EngineConfig.model_validate({"flags": {key: ("-Z",)}})
 
 
-@pytest.mark.parametrize("flags", [["-Z", ""], ["  "]])
-def test_engine_rejects_blank_flag_items(flags: list[str]) -> None:
+@pytest.mark.parametrize("flags", [("-Z", ""), ("  ",)])
+def test_engine_rejects_blank_flag_items(flags: tuple[str, ...]) -> None:
     with pytest.raises(ValidationError, match="flags"):
         EngineConfig.model_validate({"flags": {"main": flags}})
 
@@ -291,9 +289,7 @@ def test_config_rejects_asan_flags_without_harness() -> None:
 def test_config_rejects_asan_flags_out_of_range() -> None:
     with pytest.raises(ValidationError, match="flags"):
         Config(
-            paths=PathConfig(
-                main="main", seeds_dir="seeds", out_dir="out", asan_main="asan"
-            ),
+            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out", asan_main="asan"),
             engine=EngineConfig(asan_instances=1, flags={"asan2": ("-p", "fast")}),
         )
 

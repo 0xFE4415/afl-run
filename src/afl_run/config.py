@@ -4,15 +4,19 @@ import re
 from pathlib import Path
 from typing import Self
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class ExecutionConfig(BaseModel):
+class StrictModel(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid", validate_assignment=True)
+
+
+class ExecutionConfig(StrictModel):
     n_workers: int = Field(default=0, ge=0)
     log_dir: str = Field(default="logs", min_length=1)
 
 
-class PathConfig(BaseModel):
+class PathConfig(StrictModel):
     main: str = Field(min_length=1)
     seeds_dir: str = Field(min_length=1)
     out_dir: str = Field(min_length=1)
@@ -33,7 +37,7 @@ def _reject_blank_flags(items: tuple[str, ...], label: str) -> tuple[str, ...]:
     return items
 
 
-class EngineConfig(BaseModel):
+class EngineConfig(StrictModel):
     timeout_ms: int = Field(default=2500, ge=0)
     memory_limit_mb: int | None = Field(default=None, ge=0)
     memory_limit_cmplog_mb: int | None = Field(default=None, ge=0)
@@ -61,7 +65,7 @@ class EngineConfig(BaseModel):
         return value
 
 
-class EnvConfig(BaseModel):
+class EnvConfig(StrictModel):
     variables: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -72,7 +76,7 @@ class EnvConfig(BaseModel):
         return self
 
 
-class HostConfig(BaseModel):
+class HostConfig(StrictModel):
     randomize_va_space: str = "0"
     core_pattern: str = Field(default="core", min_length=1)
 
@@ -80,13 +84,11 @@ class HostConfig(BaseModel):
     @classmethod
     def check_randomize_va_space(cls, value: str) -> str:
         if value not in ("0", "1", "2"):
-            raise ValueError(
-                f"randomize_va_space must be one of '0', '1', '2', got {value!r}"
-            )
+            raise ValueError(f"randomize_va_space must be one of '0', '1', '2', got {value!r}")
         return value
 
 
-class Config(BaseModel):
+class Config(StrictModel):
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     paths: PathConfig = Field(default_factory=PathConfig)
     engine: EngineConfig = Field(default_factory=EngineConfig)
@@ -115,9 +117,7 @@ class Config(BaseModel):
                 continue
             if name == "cmplog":
                 if self.paths.cmplog is None:
-                    raise ValueError(
-                        "flags reference cmplog but no CmpLog harness is configured"
-                    )
+                    raise ValueError("flags reference cmplog but no CmpLog harness is configured")
                 continue
             if name == "laf":
                 if self.paths.laf is None:
@@ -128,12 +128,8 @@ class Config(BaseModel):
             else:
                 prefix, count, label = "asan", self.engine.asan_instances, "ASAN instances"
                 if self.paths.asan_main is None:
-                    raise ValueError(
-                        f"flags reference {name!r} but no ASAN harness is configured"
-                    )
+                    raise ValueError(f"flags reference {name!r} but no ASAN harness is configured")
             index = int(name.removeprefix(prefix))
             if not 1 <= index <= count:
-                raise ValueError(
-                    f"flags reference {name!r} but {count} {label} are configured"
-                )
+                raise ValueError(f"flags reference {name!r} but {count} {label} are configured")
         return self

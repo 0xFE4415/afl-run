@@ -27,7 +27,6 @@ class ProcessLike(Protocol):
 
 
 class AsyncProcess(ProcessLike, Protocol):
-
     @property
     def returncode(self) -> int | None: ...
 
@@ -189,8 +188,7 @@ def _log_liveness(pid: int, sample: _LivenessSample | None, elapsed: float) -> N
     if sample is None:
         return
     LOGGER.info(
-        "main PID %d: CPU %.0fs, RSS %s, log %s — still calibrating"
-        " (%.0fs elapsed)",
+        "main PID %d: CPU %.0fs, RSS %s, log %s — still calibrating (%.0fs elapsed)",
         pid,
         sample.cpu_seconds,
         _format_size(sample.rss_bytes),
@@ -199,9 +197,7 @@ def _log_liveness(pid: int, sample: _LivenessSample | None, elapsed: float) -> N
     )
 
 
-def _has_liveness_progressed(
-    previous: _LivenessSample | None, current: _LivenessSample
-) -> bool:
+def _has_liveness_progressed(previous: _LivenessSample | None, current: _LivenessSample) -> bool:
     return (
         previous is None
         or current.cpu_seconds > previous.cpu_seconds
