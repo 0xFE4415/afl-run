@@ -33,11 +33,11 @@ def _config() -> Config:
             seeds_dir="seeds",
             out_dir="out",
         ),
-        engine={
-            "memory_limit_mb": 1024,
-            "memory_limit_cmplog_mb": 2048,
-            "skip_deterministic": True,
-        },
+        engine=EngineConfig(
+            memory_limit_mb=1024,
+            memory_limit_cmplog_mb=2048,
+            skip_deterministic=True,
+        ),
     )
 
 

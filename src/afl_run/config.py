@@ -7,16 +7,16 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class StrictFrozenModel(BaseModel):
+class StrictModel(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", validate_assignment=True)
 
 
-class ExecutionConfig(StrictFrozenModel):
+class ExecutionConfig(StrictModel):
     n_workers: int = Field(default=0, ge=0)
     log_dir: str = Field(default="logs", min_length=1)
 
 
-class PathConfig(StrictFrozenModel):
+class PathConfig(StrictModel):
     main: str = Field(min_length=1)
     seeds_dir: str = Field(min_length=1)
     out_dir: str = Field(min_length=1)
@@ -37,7 +37,7 @@ def _reject_blank_flags(items: tuple[str, ...], label: str) -> tuple[str, ...]:
     return items
 
 
-class EngineConfig(StrictFrozenModel):
+class EngineConfig(StrictModel):
     timeout_ms: int = Field(default=2500, ge=0)
     memory_limit_mb: int | None = Field(default=None, ge=0)
     memory_limit_cmplog_mb: int | None = Field(default=None, ge=0)
@@ -65,7 +65,7 @@ class EngineConfig(StrictFrozenModel):
         return value
 
 
-class EnvConfig(StrictFrozenModel):
+class EnvConfig(StrictModel):
     variables: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
@@ -76,7 +76,7 @@ class EnvConfig(StrictFrozenModel):
         return self
 
 
-class HostConfig(StrictFrozenModel):
+class HostConfig(StrictModel):
     randomize_va_space: str = "0"
     core_pattern: str = Field(default="core", min_length=1)
 
@@ -88,7 +88,7 @@ class HostConfig(StrictFrozenModel):
         return value
 
 
-class Config(StrictFrozenModel):
+class Config(StrictModel):
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     paths: PathConfig = Field(default_factory=PathConfig)
     engine: EngineConfig = Field(default_factory=EngineConfig)
