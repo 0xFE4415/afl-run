@@ -33,17 +33,36 @@ def _dir(path: Path) -> Path:
     return path
 
 
-def _valid_config(tmp_path: Path) -> Config:
+def _valid_config(
+    tmp_path: Path,
+    *,
+    cmplog: bool = True,
+    laf: bool = True,
+    asan: bool = True,
+    dictionary: bool = True,
+) -> Config:
     return Config(
         paths=PathConfig(
             main=str(_harness(tmp_path / "build-afl" / "afl_harness")),
-            cmplog=str(_harness(tmp_path / "build-afl-cmp" / "afl_harness")),
-            laf=str(_harness(tmp_path / "build-afl-laf" / "afl_harness")),
-            asan_main=str(_harness(tmp_path / "build-asan" / "afl_harness")),
-            dictionary=str(_file(tmp_path / "x86.dict")),
+            cmplog=(str(_harness(tmp_path / "build-afl-cmp" / "afl_harness")) if cmplog else None),
+            laf=str(_harness(tmp_path / "build-afl-laf" / "afl_harness")) if laf else None,
+            asan_main=str(_harness(tmp_path / "build-asan" / "afl_harness")) if asan else None,
+            dictionary=str(_file(tmp_path / "x86.dict")) if dictionary else None,
             seeds_dir=str(_dir(tmp_path / "seeds")),
             out_dir=str(_dir(tmp_path / "out")),
         )
+    )
+
+
+def _replace_paths(cfg: Config, **updates: str | None) -> Config:
+    return Config.model_validate(
+        {**cfg.model_dump(), "paths": {**cfg.paths.model_dump(), **updates}}
+    )
+
+
+def _replace_engine(cfg: Config, **updates: str | None) -> Config:
+    return Config.model_validate(
+        {**cfg.model_dump(), "engine": {**cfg.engine.model_dump(), **updates}}
     )
 
 
@@ -63,9 +82,7 @@ def test_resolve_all_provided(tmp_path: Path) -> None:
 
 
 def test_optional_laf_asan_absent(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.laf = None
-    cfg.paths.asan_main = None
+    cfg = _valid_config(tmp_path, laf=False, asan=False)
     resolved = resolve_paths(cfg)
     assert resolved.laf is None
     assert resolved.asan_main is None
@@ -81,11 +98,9 @@ def test_optional_paths_resolve_for_all_configurations(
     cmplog: bool, laf: bool, asan: bool, dictionary: bool
 ) -> None:
     with tempfile.TemporaryDirectory() as directory:
-        cfg = _valid_config(Path(directory))
-        cfg.paths.cmplog = cfg.paths.cmplog if cmplog else None
-        cfg.paths.laf = cfg.paths.laf if laf else None
-        cfg.paths.asan_main = cfg.paths.asan_main if asan else None
-        cfg.paths.dictionary = cfg.paths.dictionary if dictionary else None
+        cfg = _valid_config(
+            Path(directory), cmplog=cmplog, laf=laf, asan=asan, dictionary=dictionary
+        )
 
         resolved = resolve_paths(cfg)
 
@@ -117,22 +132,19 @@ def test_missing_required_path(field: str, tmp_path: Path) -> None:
 
 
 def test_main_nonexistent(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.main = str(tmp_path / "nope" / "afl_harness")
+    cfg = _replace_paths(_valid_config(tmp_path), main=str(tmp_path / "nope" / "afl_harness"))
     with pytest.raises(ValueError):
         resolve_paths(cfg)
 
 
 def test_nonexistent_dictionary(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.dictionary = str(tmp_path / "missing.dict")
+    cfg = _replace_paths(_valid_config(tmp_path), dictionary=str(tmp_path / "missing.dict"))
     with pytest.raises(ValueError):
         resolve_paths(cfg)
 
 
 def test_nonexistent_seeds(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.seeds_dir = str(tmp_path / "missing_seeds")
+    cfg = _replace_paths(_valid_config(tmp_path), seeds_dir=str(tmp_path / "missing_seeds"))
     with pytest.raises(ValueError):
         resolve_paths(cfg)
 
@@ -142,25 +154,22 @@ def test_nonexistent_seeds(tmp_path: Path) -> None:
     [("laf", "LAF harness"), ("asan_main", "ASAN harness")],
 )
 def test_nonexistent_optional_harness(field: str, message: str, tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    setattr(cfg.paths, field, str(tmp_path / "missing-harness"))
+    cfg = _replace_paths(_valid_config(tmp_path), **{field: str(tmp_path / "missing-harness")})
 
     with pytest.raises(ValueError, match=message):
         resolve_paths(cfg)
 
 
 def test_out_dir_rejected_when_existing_file(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
     out_file = _file(tmp_path / "outfile")
-    cfg.paths.out_dir = str(out_file)
+    cfg = _replace_paths(_valid_config(tmp_path), out_dir=str(out_file))
 
     with pytest.raises(ValueError, match="out_dir"):
         resolve_paths(cfg)
 
 
 def test_nonexistent_afl_tmpdir(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.engine.afl_tmpdir = str(tmp_path / "missing-tmp")
+    cfg = _replace_engine(_valid_config(tmp_path), afl_tmpdir=str(tmp_path / "missing-tmp"))
 
     with pytest.raises(ValueError, match="afl_tmpdir"):
         resolve_paths(cfg)
@@ -206,11 +215,7 @@ def test_cli_dry_run_accepts_fresh_without_modifying_output(tmp_path: Path) -> N
 
 def test_cli_dry_run_prints_minimal_campaign(tmp_path: Path, caplog) -> None:
     caplog.set_level("INFO")
-    cfg = _valid_config(tmp_path)
-    cfg.paths.cmplog = None
-    cfg.paths.laf = None
-    cfg.paths.asan_main = None
-    cfg.paths.dictionary = None
+    cfg = _valid_config(tmp_path, cmplog=False, laf=False, asan=False, dictionary=False)
     config_path = tmp_path / "config.json"
     config_path.write_text(cfg.model_dump_json())
 
@@ -222,8 +227,7 @@ def test_cli_dry_run_prints_minimal_campaign(tmp_path: Path, caplog) -> None:
 
 
 def test_cli_reports_missing_path(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
-    cfg.paths.main = str(tmp_path / "missing" / "afl_harness")
+    cfg = _replace_paths(_valid_config(tmp_path), main=str(tmp_path / "missing" / "afl_harness"))
     config_path = tmp_path / "config.json"
     config_path.write_text(cfg.model_dump_json())
 
@@ -234,9 +238,8 @@ def test_cli_reports_missing_path(tmp_path: Path) -> None:
 
 
 def test_cli_reports_out_dir_not_a_directory(tmp_path: Path) -> None:
-    cfg = _valid_config(tmp_path)
     out_file = _file(tmp_path / "outfile")
-    cfg.paths.out_dir = str(out_file)
+    cfg = _replace_paths(_valid_config(tmp_path), out_dir=str(out_file))
     config_path = tmp_path / "config.json"
     config_path.write_text(cfg.model_dump_json())
 

@@ -8,7 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        validate_assignment=True,
+        frozen=True,
+    )
 
 
 class ExecutionConfig(StrictModel):
