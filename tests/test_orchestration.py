@@ -24,16 +24,24 @@ from afl_run.orchestration import (
 )
 
 
-def _config() -> Config:
+def _config(
+    *,
+    execution: ExecutionConfig | None = None,
+    engine: EngineConfig | None = None,
+    paths: PathConfig | None = None,
+) -> Config:
     return Config(
-        paths=PathConfig(
+        paths=paths
+        or PathConfig(
             main="main",
             cmplog="cmplog",
             dictionary="dict",
             seeds_dir="seeds",
             out_dir="out",
         ),
-        engine=EngineConfig(
+        execution=execution or ExecutionConfig(),
+        engine=engine
+        or EngineConfig(
             memory_limit_mb=1024,
             memory_limit_cmplog_mb=2048,
             skip_deterministic=True,
@@ -100,9 +108,7 @@ def test_build_cmplog_command_requires_harness() -> None:
 
 
 def test_build_worker_specs() -> None:
-    config = _config()
-    config.execution.n_workers = 2
-    config.engine.asan_instances = 2
+    config = _config(execution=ExecutionConfig(n_workers=2), engine=EngineConfig(asan_instances=2))
     paths = relative_paths()
     paths.laf = Path("laf")
     paths.asan_main = Path("asan")
@@ -119,8 +125,7 @@ def test_build_worker_specs() -> None:
 
 
 def test_build_worker_specs_pairs_names_with_commands() -> None:
-    config = _config()
-    config.execution.n_workers = 1
+    config = _config(execution=ExecutionConfig(n_workers=1))
     paths = relative_paths()
     paths.laf = Path("laf")
 
@@ -134,8 +139,7 @@ def test_build_worker_specs_pairs_names_with_commands() -> None:
 
 
 def test_main_command_includes_main_flags() -> None:
-    config = _config()
-    config.engine.flags = {"main": ("-p", "explore")}
+    config = _config(engine=EngineConfig(flags={"main": ("-p", "explore")}))
 
     command = build_main_command(config, relative_paths())
 
@@ -143,8 +147,7 @@ def test_main_command_includes_main_flags() -> None:
 
 
 def test_cmplog_command_includes_cmplog_flags() -> None:
-    config = _config()
-    config.engine.flags = {"cmplog": ("-L", "0")}
+    config = _config(engine=EngineConfig(flags={"cmplog": ("-L", "0")}))
 
     command = build_cmplog_command(config, relative_paths())
 
@@ -152,9 +155,10 @@ def test_cmplog_command_includes_cmplog_flags() -> None:
 
 
 def test_worker_flags_apply_role_then_instance() -> None:
-    config = _config()
-    config.execution.n_workers = 2
-    config.engine.flags = {"worker": ("-p", "rare"), "w2": ("-L", "0")}
+    config = _config(
+        execution=ExecutionConfig(n_workers=2),
+        engine=EngineConfig(flags={"worker": ("-p", "rare"), "w2": ("-L", "0")}),
+    )
 
     specs = build_worker_specs(config, relative_paths())
     commands = dict(specs)
@@ -164,9 +168,11 @@ def test_worker_flags_apply_role_then_instance() -> None:
 
 
 def test_worker_role_does_not_apply_to_laf() -> None:
-    config = _config()
-    config.execution.n_workers = 1
-    config.engine.flags = {"worker": ("-p", "rare"), "laf": ("-p", "seek")}
+    config = _config(
+        execution=ExecutionConfig(n_workers=1),
+        engine=EngineConfig(flags={"worker": ("-p", "rare"), "laf": ("-p", "seek")}),
+        paths=PathConfig(main="main", cmplog="cmplog", laf="laf", seeds_dir="seeds", out_dir="out"),
+    )
     paths = relative_paths()
     paths.laf = Path("laf")
 
@@ -178,9 +184,15 @@ def test_worker_role_does_not_apply_to_laf() -> None:
 
 
 def test_asan_flags_apply_role_then_instance() -> None:
-    config = _config()
-    config.engine.asan_instances = 2
-    config.engine.flags = {"asan": ("-p", "fast"), "asan2": ("-L", "0")}
+    config = _config(
+        engine=EngineConfig(
+            asan_instances=2,
+            flags={"asan": ("-p", "fast"), "asan2": ("-L", "0")},
+        ),
+        paths=PathConfig(
+            main="main", cmplog="cmplog", asan_main="asan", seeds_dir="seeds", out_dir="out"
+        ),
+    )
     paths = relative_paths()
     paths.asan_main = Path("asan")
 
@@ -192,8 +204,7 @@ def test_asan_flags_apply_role_then_instance() -> None:
 
 
 def test_build_campaign_specs_orders_main_before_other_fuzzers() -> None:
-    config = _config()
-    config.execution.n_workers = 1
+    config = _config(execution=ExecutionConfig(n_workers=1))
     paths = relative_paths()
     paths.laf = Path("laf")
 

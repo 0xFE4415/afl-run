@@ -26,6 +26,15 @@ def test_default_config() -> None:
     assert cfg.env.variables == {}
 
 
+def test_config_is_frozen() -> None:
+    cfg = Config(paths=minimal_path_config())
+
+    with pytest.raises(ValidationError, match="frozen"):
+        setattr(cfg, "execution", ExecutionConfig())
+    with pytest.raises(ValidationError, match="frozen"):
+        setattr(cfg.execution, "n_workers", 1)
+
+
 def test_afl_tmpdir_none_ok() -> None:
     cfg = EngineConfig(afl_tmpdir=None)
     assert cfg.afl_tmpdir is None
@@ -72,16 +81,15 @@ def test_out_dir_containing_afl_tmpdir_is_rejected() -> None:
 
 
 def _config_with_protected(field: str, protected: str, out_dir: str) -> Config:
-    paths = PathConfig(main="main", seeds_dir="seeds", out_dir=out_dir)
-    execution = ExecutionConfig(log_dir="logs")
-    engine = EngineConfig()
-    if field == "seeds_dir":
-        paths.seeds_dir = protected
-    elif field == "log_dir":
-        execution.log_dir = protected
-    else:
-        engine.afl_tmpdir = protected
-    return Config(paths=paths, execution=execution, engine=engine)
+    return Config(
+        paths=PathConfig(
+            main="main",
+            seeds_dir=protected if field == "seeds_dir" else "seeds",
+            out_dir=out_dir,
+        ),
+        execution=ExecutionConfig(log_dir=protected if field == "log_dir" else "logs"),
+        engine=EngineConfig(afl_tmpdir=protected if field == "afl_tmpdir" else None),
+    )
 
 
 _path_segments = st.lists(
