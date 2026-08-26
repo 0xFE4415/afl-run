@@ -73,9 +73,7 @@ def test_engine_args_omit_unconfigured_dictionary() -> None:
 
 
 def test_asan_args_use_scaled_timeout() -> None:
-    config = EngineConfig(
-        asan_timeout_scale=2.5, memory_limit_asan_mb=0, skip_deterministic=True
-    )
+    config = EngineConfig(asan_timeout_scale=2.5, memory_limit_asan_mb=0, skip_deterministic=True)
     assert build_asan_args(config, relative_paths()) == (
         "-G",
         "4096",
@@ -143,9 +141,9 @@ def test_common_args_reflect_engine_settings(
     memory=st.none() | st.integers(min_value=0, max_value=1_000_000),
     dictionary=st.none() | st.just(Path("dict")),
     skip_deterministic=st.booleans(),
-    additional_flags=st.lists(
-        st.from_regex(r"--?[a-z]{1,6}", fullmatch=True), max_size=3
-    ).map(tuple),
+    additional_flags=st.lists(st.from_regex(r"--?[a-z]{1,6}", fullmatch=True), max_size=3).map(
+        tuple
+    ),
 )
 def test_common_args_preserve_optional_settings(
     memory: int | None,

@@ -394,11 +394,7 @@ def test_wait_for_main_handles_reaped_main(tmp_path: Path, stats_exists: bool) -
 
 def test_wait_for_main_creates_missing_main_directory(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
-    script = (
-        "import sys, time; "
-        "time.sleep(0.1); "
-        "open(sys.argv[1], 'w').close()"
-    )
+    script = "import sys, time; time.sleep(0.1); open(sys.argv[1], 'w').close()"
     process = subprocess.Popen([sys.executable, "-c", script, str(stats)])
 
     try:
