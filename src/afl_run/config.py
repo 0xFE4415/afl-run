@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -82,15 +82,8 @@ class EnvConfig(StrictModel):
 
 
 class HostConfig(StrictModel):
-    randomize_va_space: str = "0"
+    randomize_va_space: Literal["0", "1", "2"] = "0"
     core_pattern: str = Field(default="core", min_length=1)
-
-    @field_validator("randomize_va_space")
-    @classmethod
-    def check_randomize_va_space(cls, value: str) -> str:
-        if value not in ("0", "1", "2"):
-            raise ValueError(f"randomize_va_space must be one of '0', '1', '2', got {value!r}")
-        return value
 
 
 class Config(StrictModel):

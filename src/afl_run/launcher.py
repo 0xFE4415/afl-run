@@ -5,6 +5,7 @@ import io
 import logging
 import os
 import shlex
+import signal
 import subprocess
 import time
 from collections.abc import Callable, Iterable, Mapping
@@ -67,6 +68,7 @@ class FuzzerGroup:
     def __init__(self, fuzzers: Iterable[FuzzerProcess] = (), *, dry_run: bool = False) -> None:
         self._fuzzers = list(fuzzers)
         self._dry_run = dry_run
+        self._sleeping = False
 
     @property
     def fuzzers(self) -> tuple[FuzzerProcess, ...]:
@@ -109,6 +111,25 @@ class FuzzerGroup:
         if self._dry_run:
             return
         await _abort_if_any_died(self.fuzzers)
+
+    @property
+    def is_sleeping(self) -> bool:
+        return self._sleeping
+
+    def toggle_sleep(self) -> bool:
+        """Toggle sleep (SIGSTOP) on every live fuzzer and its children.
+
+        Returns the new sleeping state: ``True`` when the fuzzers are now
+        asleep, ``False`` when they have been resumed.
+        """
+        self._sleeping = not self._sleeping
+        if self._dry_run:
+            return self._sleeping
+        signum = signal.SIGSTOP if self._sleeping else signal.SIGCONT
+        for fuzzer in self._fuzzers:
+            if fuzzer.process.returncode is None:
+                _signal_process_group(fuzzer.pid, signum)
+        return self._sleeping
 
     async def wait_for_main(
         self,
@@ -252,6 +273,7 @@ async def launch_fuzzer(
             stdout=log_file,
             stderr=subprocess.STDOUT,
             env=child_environment,
+            start_new_session=True,
         )
     except BaseException:
         log_file.close()
@@ -282,6 +304,10 @@ async def _abort_if_any_died(fuzzers: tuple[FuzzerProcess, ...]) -> None:
 
 async def _terminate_fuzzers(fuzzers: tuple[FuzzerProcess, ...]) -> None:
     live_fuzzers = tuple(fuzzer for fuzzer in fuzzers if fuzzer.process.returncode is None)
+    # A sleeping (SIGSTOP'd) fuzzer ignores SIGTERM/SIGKILL until resumed, so
+    # continue every live process group before terminating the campaign.
+    for fuzzer in live_fuzzers:
+        _signal_process_group(fuzzer.pid, signal.SIGCONT)
     for fuzzer in live_fuzzers:
         fuzzer.process.terminate()
     try:
@@ -301,3 +327,20 @@ async def _terminate_fuzzers(fuzzers: tuple[FuzzerProcess, ...]) -> None:
 def _close_logs(fuzzers: tuple[FuzzerProcess, ...]) -> None:
     for fuzzer in fuzzers:
         fuzzer.log_file.close()
+
+
+def _signal_process_group(pid: int, signum: signal.Signals) -> None:
+    # Each fuzzer is started in its own session (see launch_fuzzer), so its
+    # process group id equals its pid. Signalling the group stops the fuzzer
+    # together with any descendant processes (target, CmpLog helpers, ...).
+    try:
+        os.killpg(os.getpgid(pid), signum)
+    except (ProcessLookupError, PermissionError) as error:
+        LOGGER.warning("could not signal fuzzer process group %d: %s", pid, error)
+
+
+def _handle_sleep_signal(group: FuzzerGroup) -> None:
+    if group.toggle_sleep():
+        LOGGER.info("fuzzers sleeping; press Ctrl-Z to resume")
+    else:
+        LOGGER.info("fuzzers resumed; press Ctrl-Z to sleep again")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal, cast
 
 import pytest
 from helpers import minimal_path_config
@@ -161,14 +162,14 @@ def test_asan_timeout_scale_accepts_int_and_float(value: int | float) -> None:
 
 
 @pytest.mark.parametrize("value", ["0", "1", "2"])
-def test_host_accepts_valid_randomize_va_space(value: str) -> None:
+def test_host_accepts_valid_randomize_va_space(value: Literal["0", "1", "2"]) -> None:
     assert HostConfig(randomize_va_space=value).randomize_va_space == value
 
 
 @pytest.mark.parametrize("value", ["", "3", "-1", "01", "on", "false"])
 def test_host_rejects_invalid_randomize_va_space(value: str) -> None:
     with pytest.raises(ValidationError, match="randomize_va_space"):
-        HostConfig(randomize_va_space=value)
+        HostConfig(randomize_va_space=cast("Literal['0', '1', '2']", value))
 
 
 def test_host_rejects_empty_core_pattern() -> None:

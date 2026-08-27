@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import signal
 import subprocess
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -16,11 +17,13 @@ from afl_run.launcher import (
     ProcessLike,
     _abort_if_any_died,
     _format_size,
+    _handle_sleep_signal,
     _has_liveness_progressed,
     _LivenessSample,
     _log_liveness,
     _monitor_main_startup,
     _sample_liveness,
+    _signal_process_group,
     _warn_if_startup_is_slow,
     launch_fuzzer,
 )
@@ -487,7 +490,14 @@ def test_sample_liveness_reads_proc_and_log(tmp_path: Path) -> None:
     log_path.write_bytes(b"abc")
 
     try:
-        sample = _sample_liveness(child.pid, log_path)
+        # Poll until the freshly spawned process is observable; sampling it
+        # immediately can race with process bookkeeping under a busy suite.
+        sample = None
+        for _ in range(100):
+            sample = _sample_liveness(child.pid, log_path)
+            if sample is not None and sample[1] > 0:
+                break
+            time.sleep(0.01)
     finally:
         child.terminate()
         child.wait()
@@ -536,3 +546,86 @@ def test_fuzzer_group_cancels_other_waiters() -> None:
     asyncio.run(run())
 
     assert pending_process.calls == 2
+
+
+def test_fuzzer_group_toggle_sleep_stops_and_continues_live_processes() -> None:
+    live = FuzzerProcess("live", _process(), Path("live.log"), MagicMock())
+    dead = FuzzerProcess("dead", _process(returncode=1), Path("dead.log"), MagicMock())
+
+    async def run() -> None:
+        async with FuzzerGroup((live, dead)) as group:
+            with (
+                patch("afl_run.launcher.os.getpgid", return_value=live.pid),
+                patch("afl_run.launcher.os.killpg") as killpg,
+            ):
+                assert group.is_sleeping is False
+                assert group.toggle_sleep() is True
+                assert group.is_sleeping is True
+                assert group.toggle_sleep() is False
+                assert group.is_sleeping is False
+                # Dead fuzzers (returncode set) are skipped.
+                killpg.assert_has_calls(
+                    [
+                        call(live.pid, signal.SIGSTOP),
+                        call(live.pid, signal.SIGCONT),
+                    ]
+                )
+
+    asyncio.run(run())
+
+
+def test_dry_run_group_toggle_sleep_only_tracks_state() -> None:
+    async def run() -> None:
+        async with FuzzerGroup(dry_run=True) as group:
+            fuzzer = await group.launch(("afl-fuzz",), "main", Path("logs"), {})
+            fuzzer.process.terminate()
+            fuzzer.process.kill()
+            assert await fuzzer.process.wait() == 0
+            assert group.toggle_sleep() is True
+            assert group.is_sleeping is True
+
+    asyncio.run(run())
+
+
+def test_handle_sleep_signal_logs_sleep_and_resume(caplog) -> None:
+    caplog.set_level(logging.INFO, logger="afl_run.launcher")
+
+    async def run() -> None:
+        async with FuzzerGroup() as group:
+            _handle_sleep_signal(group)
+            assert "fuzzers sleeping" in caplog.text
+            _handle_sleep_signal(group)
+            assert "fuzzers resumed" in caplog.text
+
+    asyncio.run(run())
+
+
+def test_signal_process_group_warns_on_failure(caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="afl_run.launcher")
+
+    with patch("afl_run.launcher.os.getpgid", side_effect=ProcessLookupError("no such pid")):
+        _signal_process_group(999, signal.SIGSTOP)
+
+    assert "could not signal fuzzer process group 999" in caplog.text
+
+
+def test_signal_process_group_warns_on_permission_error(caplog) -> None:
+    caplog.set_level(logging.WARNING, logger="afl_run.launcher")
+
+    with (
+        patch("afl_run.launcher.os.getpgid", return_value=999),
+        patch("afl_run.launcher.os.killpg", side_effect=PermissionError("denied")),
+    ):
+        _signal_process_group(999, signal.SIGSTOP)
+
+    assert "could not signal fuzzer process group 999" in caplog.text
+
+
+def test_signal_process_group_signals_group_on_success() -> None:
+    with (
+        patch("afl_run.launcher.os.getpgid", return_value=7),
+        patch("afl_run.launcher.os.killpg") as killpg,
+    ):
+        _signal_process_group(7, signal.SIGCONT)
+
+    killpg.assert_called_once_with(7, signal.SIGCONT)

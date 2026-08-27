@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import signal
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from afl_run.cli import _run_campaign, main
+from afl_run.cli import _run_campaign, _run_campaign_with_signals, main
 from afl_run.config import Config, ExecutionConfig, PathConfig
 from afl_run.launcher import FuzzerProcess
 from afl_run.paths import ResolvedPaths, resolve_paths
@@ -55,9 +56,7 @@ def _fuzzer(name: str) -> FuzzerProcess:
     return FuzzerProcess(name, process, Path(f"{name}.log"), MagicMock())
 
 
-def test_run_campaign_launches_main_cmplog_and_workers(tmp_path: Path, caplog) -> None:
-    caplog.set_level(logging.INFO)
-    cfg, paths = _config(tmp_path, n_workers=3, optional=True)
+def _make_launch_recorder() -> tuple[list[str], Callable[..., Awaitable[FuzzerProcess]]]:
     launched: list[str] = []
 
     async def launch(
@@ -68,6 +67,14 @@ def test_run_campaign_launches_main_cmplog_and_workers(tmp_path: Path, caplog) -
     ) -> FuzzerProcess:
         launched.append(name)
         return _fuzzer(name)
+
+    return launched, launch
+
+
+def test_run_campaign_launches_main_cmplog_and_workers(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    cfg, paths = _config(tmp_path, n_workers=3, optional=True)
+    launched, launch = _make_launch_recorder()
 
     with (
         patch("afl_run.cli.configure_host") as configure,
@@ -93,16 +100,7 @@ def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Pa
     existing = paths.out_dir / "existing.txt"
     paths.out_dir.mkdir(parents=True)
     existing.write_text("keep")
-    launched: list[str] = []
-
-    async def launch(
-        command: tuple[str, ...],
-        name: str,
-        *args: object,
-        **kwargs: object,
-    ) -> FuzzerProcess:
-        launched.append(name)
-        return _fuzzer(name)
+    launched, launch = _make_launch_recorder()
 
     with (
         patch("afl_run.cli.configure_host"),
@@ -231,14 +229,13 @@ def test_main_handles_campaign_cancellation(tmp_path: Path, caplog) -> None:
     config_path = tmp_path / "config.json"
     config_path.write_text("{}")
 
-    def cancel(campaign: Any) -> None:
-        campaign.close()
-        raise asyncio.CancelledError
-
     with (
         patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
         patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
-        patch("afl_run.cli.asyncio.run", side_effect=cancel),
+        patch(
+            "afl_run.cli.asyncio.run",
+            side_effect=_close_and_raise(asyncio.CancelledError()),
+        ),
     ):
         result = CliRunner().invoke(main, [str(config_path)])
 
@@ -251,14 +248,10 @@ def test_main_handles_campaign_timeout(tmp_path: Path, caplog) -> None:
     config_path = tmp_path / "config.json"
     config_path.write_text("{}")
 
-    def timeout(campaign: Any) -> None:
-        campaign.close()
-        raise TimeoutError
-
     with (
         patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
         patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
-        patch("afl_run.cli.asyncio.run", side_effect=timeout),
+        patch("afl_run.cli.asyncio.run", side_effect=_close_and_raise(TimeoutError())),
     ):
         result = CliRunner().invoke(main, ["--timeout", "1.5", str(config_path)])
 
@@ -313,7 +306,7 @@ def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
     with patch("afl_run.cli._run_campaign_with_signals", new=AsyncMock()) as campaign:
         asyncio.run(_run_campaign(cfg, paths, timeout=1.5))
 
-    campaign.assert_awaited_once_with(cfg, paths, False, 1.5, False)
+    campaign.assert_awaited_once_with(cfg, paths, False, 1.5, False, False)
 
 
 def test_run_campaign_registers_and_removes_interrupt_signals(tmp_path: Path) -> None:
@@ -329,3 +322,45 @@ def test_run_campaign_registers_and_removes_interrupt_signals(tmp_path: Path) ->
     expected = [signal.SIGINT, signal.SIGTERM, signal.SIGHUP]
     assert [call.args[0] for call in loop.add_signal_handler.call_args_list] == expected
     assert [call.args[0] for call in loop.remove_signal_handler.call_args_list] == expected
+
+
+def _run_with_signals(cfg, paths, no_sleep: bool, loop: MagicMock) -> None:
+    with (
+        patch("afl_run.cli.asyncio.get_running_loop", return_value=loop),
+        patch("afl_run.cli.configure_host"),
+        patch("afl_run.cli.build_environment", return_value={}),
+        patch(
+            "afl_run.cli.build_campaign_specs",
+            return_value=[("main", ("afl-fuzz",))],
+        ),
+        patch("afl_run.cli.FuzzerGroup") as group_cls,
+    ):
+        group = group_cls.return_value.__enter__.return_value
+        group.launch = AsyncMock(return_value=_fuzzer("main"))
+        group.wait_for_main = AsyncMock()
+        group.abort_if_any_died = AsyncMock()
+        asyncio.run(_run_campaign_with_signals(cfg, paths, False, no_sleep=no_sleep))
+
+
+def test_run_campaign_with_signals_registers_sleep_when_enabled(tmp_path: Path) -> None:
+    cfg, paths = _config(tmp_path)
+    loop = MagicMock()
+
+    _run_with_signals(cfg, paths, no_sleep=False, loop=loop)
+
+    assert any(call.args[0] == signal.SIGTSTP for call in loop.add_signal_handler.call_args_list)
+    assert any(call.args[0] == signal.SIGTSTP for call in loop.remove_signal_handler.call_args_list)
+
+
+def test_run_campaign_with_signals_skips_sleep_when_disabled(tmp_path: Path) -> None:
+    cfg, paths = _config(tmp_path)
+    loop = MagicMock()
+
+    _run_with_signals(cfg, paths, no_sleep=True, loop=loop)
+
+    assert not any(
+        call.args[0] == signal.SIGTSTP for call in loop.add_signal_handler.call_args_list
+    )
+    assert not any(
+        call.args[0] == signal.SIGTSTP for call in loop.remove_signal_handler.call_args_list
+    )
