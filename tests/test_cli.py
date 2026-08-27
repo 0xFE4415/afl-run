@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import signal
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -55,9 +56,7 @@ def _fuzzer(name: str) -> FuzzerProcess:
     return FuzzerProcess(name, process, Path(f"{name}.log"), MagicMock())
 
 
-def test_run_campaign_launches_main_cmplog_and_workers(tmp_path: Path, caplog) -> None:
-    caplog.set_level(logging.INFO)
-    cfg, paths = _config(tmp_path, n_workers=3, optional=True)
+def _make_launch_recorder() -> tuple[list[str], Callable[..., Awaitable[FuzzerProcess]]]:
     launched: list[str] = []
 
     async def launch(
@@ -68,6 +67,14 @@ def test_run_campaign_launches_main_cmplog_and_workers(tmp_path: Path, caplog) -
     ) -> FuzzerProcess:
         launched.append(name)
         return _fuzzer(name)
+
+    return launched, launch
+
+
+def test_run_campaign_launches_main_cmplog_and_workers(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    cfg, paths = _config(tmp_path, n_workers=3, optional=True)
+    launched, launch = _make_launch_recorder()
 
     with (
         patch("afl_run.cli.configure_host") as configure,
@@ -93,16 +100,7 @@ def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Pa
     existing = paths.out_dir / "existing.txt"
     paths.out_dir.mkdir(parents=True)
     existing.write_text("keep")
-    launched: list[str] = []
-
-    async def launch(
-        command: tuple[str, ...],
-        name: str,
-        *args: object,
-        **kwargs: object,
-    ) -> FuzzerProcess:
-        launched.append(name)
-        return _fuzzer(name)
+    launched, launch = _make_launch_recorder()
 
     with (
         patch("afl_run.cli.configure_host"),
@@ -231,14 +229,13 @@ def test_main_handles_campaign_cancellation(tmp_path: Path, caplog) -> None:
     config_path = tmp_path / "config.json"
     config_path.write_text("{}")
 
-    def cancel(campaign: Any) -> None:
-        campaign.close()
-        raise asyncio.CancelledError
-
     with (
         patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
         patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
-        patch("afl_run.cli.asyncio.run", side_effect=cancel),
+        patch(
+            "afl_run.cli.asyncio.run",
+            side_effect=_close_and_raise(asyncio.CancelledError()),
+        ),
     ):
         result = CliRunner().invoke(main, [str(config_path)])
 
@@ -251,14 +248,10 @@ def test_main_handles_campaign_timeout(tmp_path: Path, caplog) -> None:
     config_path = tmp_path / "config.json"
     config_path.write_text("{}")
 
-    def timeout(campaign: Any) -> None:
-        campaign.close()
-        raise TimeoutError
-
     with (
         patch("afl_run.cli.Config.model_validate_json", return_value=MagicMock()),
         patch("afl_run.cli.resolve_paths", return_value=MagicMock()),
-        patch("afl_run.cli.asyncio.run", side_effect=timeout),
+        patch("afl_run.cli.asyncio.run", side_effect=_close_and_raise(TimeoutError())),
     ):
         result = CliRunner().invoke(main, ["--timeout", "1.5", str(config_path)])
 

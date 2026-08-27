@@ -490,7 +490,14 @@ def test_sample_liveness_reads_proc_and_log(tmp_path: Path) -> None:
     log_path.write_bytes(b"abc")
 
     try:
-        sample = _sample_liveness(child.pid, log_path)
+        # Poll until the freshly spawned process is observable; sampling it
+        # immediately can race with process bookkeeping under a busy suite.
+        sample = None
+        for _ in range(100):
+            sample = _sample_liveness(child.pid, log_path)
+            if sample is not None and sample[1] > 0:
+                break
+            time.sleep(0.01)
     finally:
         child.terminate()
         child.wait()
