@@ -185,7 +185,7 @@ def test_host_rejects_empty_core_pattern() -> None:
         "out_dir",
         "cmplog",
         "laf",
-        "asan_main",
+        "asan",
         "dictionary",
     ],
 )
@@ -252,7 +252,7 @@ def test_config_accepts_flags_for_configured_instances() -> None:
             main="main",
             cmplog="cmplog",
             laf="laf",
-            asan_main="asan",
+            asan="asan",
             seeds_dir="seeds",
             out_dir="out",
         ),
@@ -298,7 +298,7 @@ def test_config_rejects_asan_flags_without_harness() -> None:
 def test_config_rejects_asan_flags_out_of_range() -> None:
     with pytest.raises(ValidationError, match="flags"):
         Config(
-            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out", asan_main="asan"),
+            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out", asan="asan"),
             engine=EngineConfig(asan_instances=1, flags={"asan2": ("-p", "fast")}),
         )
 

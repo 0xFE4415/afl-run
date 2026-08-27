@@ -7,7 +7,7 @@
     "main": "sample/build-afl/afl_sample_harness",
     "cmplog": "sample/build-cmplog/afl_sample_harness",
     "laf": "sample/build-laf/afl_sample_harness",
-    "asan_main": "sample/build-asan/afl_sample_harness",
+    "asan": "sample/build-asan/afl_sample_harness",
     "dictionary": "sample/dictionary.txt",
     "seeds_dir": "sample/seeds",
     "out_dir": "sample/fuzz/out-advanced"

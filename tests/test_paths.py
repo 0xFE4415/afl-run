@@ -45,7 +45,7 @@ def test_resolve_all_provided(tmp_path: Path) -> None:
     assert resolved.main == tmp_path / "build-afl" / "afl_harness"
     assert resolved.cmplog == tmp_path / "build-afl-cmp" / "afl_harness"
     assert resolved.laf == tmp_path / "build-afl-laf" / "afl_harness"
-    assert resolved.asan_main == tmp_path / "build-asan" / "afl_harness"
+    assert resolved.asan == tmp_path / "build-asan" / "afl_harness"
     assert resolved.dictionary == tmp_path / "x86.dict"
     assert resolved.seeds_dir == tmp_path / "seeds"
     assert resolved.out_dir == tmp_path / "out"
@@ -56,7 +56,7 @@ def test_optional_laf_asan_absent(tmp_path: Path) -> None:
     cfg = _valid_config(tmp_path, laf=False, asan=False)
     resolved = resolve_paths(cfg)
     assert resolved.laf is None
-    assert resolved.asan_main is None
+    assert resolved.asan is None
 
 
 @given(
@@ -77,7 +77,7 @@ def test_optional_paths_resolve_for_all_configurations(
 
         assert (resolved.cmplog is not None) is cmplog
         assert (resolved.laf is not None) is laf
-        assert (resolved.asan_main is not None) is asan
+        assert (resolved.asan is not None) is asan
         assert (resolved.dictionary is not None) is dictionary
 
 
@@ -122,7 +122,7 @@ def test_nonexistent_seeds(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("field", "message"),
-    [("laf", "LAF harness"), ("asan_main", "ASAN harness")],
+    [("laf", "LAF harness"), ("asan", "ASAN harness")],
 )
 def test_nonexistent_optional_harness(field: str, message: str, tmp_path: Path) -> None:
     cfg = _replace_paths(_valid_config(tmp_path), **{field: str(tmp_path / "missing-harness")})

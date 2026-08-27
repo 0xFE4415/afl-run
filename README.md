@@ -26,11 +26,11 @@ formatter, linter and type checker all cover both `src` and `tests`:
 Markdownlint is required for all Markdown files and runs as part of CI.
 
 ```sh
-nox -s check       # format + ruff + ty (strict) + pytest + 100% branch coverage
-nox -s format      # ruff formatter check for src and tests
-nox -s ruff        # ruff linter for src and tests
-nox -s ty          # ty (strict) type check for src and tests
-nox -s test        # pytest only
+uv run nox -s check       # format + ruff + ty (strict) + pytest + 100% branch coverage
+uv run nox -s format      # ruff formatter check for src and tests
+uv run nox -s ruff        # ruff linter for src and tests
+uv run nox -s ty          # ty (strict) type check for src and tests
+uv run nox -s test        # pytest only
 ```
 
 Or directly via the venv:
@@ -95,7 +95,7 @@ Example:
     "main": "build-afl/afl_harness",
     "cmplog": "build-afl-cmp/afl_harness",
     "laf": "build-afl-laf/afl_harness",
-    "asan_main": "build-asan/afl_harness",
+    "asan": "build-asan/afl_harness",
     "dictionary": "x86.dict",
     "seeds_dir": "seeds",
     "out_dir": "out"

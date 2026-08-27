@@ -89,7 +89,7 @@ def test_build_worker_specs() -> None:
     )
     paths = relative_paths()
     paths.laf = Path("laf")
-    paths.asan_main = Path("asan")
+    paths.asan = Path("asan")
 
     specs = build_worker_specs(config, paths)
 
@@ -168,11 +168,11 @@ def test_asan_flags_apply_role_then_instance() -> None:
             flags={"asan": ("-p", "fast"), "asan2": ("-L", "0")},
         ),
         paths=PathConfig(
-            main="main", cmplog="cmplog", asan_main="asan", seeds_dir="seeds", out_dir="out"
+            main="main", cmplog="cmplog", asan="asan", seeds_dir="seeds", out_dir="out"
         ),
     )
     paths = relative_paths()
-    paths.asan_main = Path("asan")
+    paths.asan = Path("asan")
 
     specs = build_worker_specs(config, paths)
     commands = dict(specs)
@@ -212,7 +212,7 @@ def test_build_worker_specs_matches_configured_instances(
     )
     paths = relative_paths()
     paths.laf = laf_path
-    paths.asan_main = asan_path
+    paths.asan = asan_path
 
     specs = build_worker_specs(config, paths)
 
