@@ -70,6 +70,8 @@ Use `--fresh` to remove the existing campaign output before starting. The
 configuration is rejected when `out_dir` equals or contains the configured
 seed, log, or AFL temporary directory.
 
+Use `--no-sleep` to disable the `Ctrl-Z` sleep behaviour described below.
+
 All paths must be supplied in the JSON configuration; no paths are derived or
 rewritten. The configuration layout is shown in the example below. Environment
 variables for child `afl-fuzz` processes are key/value pairs under
@@ -158,6 +160,13 @@ no progress for 5 minutes (for example, wedged on a kernel resource).
 While a campaign is running, press `Ctrl-C` to stop it gracefully. The runner
 prints an `afl-whatsup` monitoring command and `pkill afl-fuzz` as an emergency
 fallback after all fuzzer commands start.
+
+Press `Ctrl-Z` to put every fuzzer to sleep (sent `SIGSTOP`) without interrupting
+the runner: the campaign stays alive and resumes monitoring as soon as a fuzzer is
+paused, so it is not reported as crashed. Press `Ctrl-Z` again to wake them
+(`SIGCONT`) and continue fuzzing. This is enabled by default; pass `--no-sleep`
+to disable it. Each fuzzer is started in its own session so the terminal
+`Ctrl-Z` is handled only by the runner, never delivered directly to the fuzzers.
 
 ### AFL++ Tuning
 
