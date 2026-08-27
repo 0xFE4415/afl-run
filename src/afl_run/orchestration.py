@@ -25,6 +25,9 @@ CMPLOG_NAME = "cmplog"
 # that skew when deciding whether fuzzer_stats was written after launch.
 STATS_MTIME_SKEW_SECONDS = 1.0
 
+type FuzzerSpec = tuple[str, tuple[str, ...]]
+type FuzzerSpecs = tuple[FuzzerSpec, ...]
+
 
 def build_main_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
     return _build_instance_command(
@@ -52,59 +55,56 @@ def build_cmplog_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...
 def build_worker_specs(
     config: Config,
     paths: ResolvedPaths,
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    specs: list[tuple[str, tuple[str, ...]]] = []
-    for index in range(1, config.execution.n_workers + 1):
-        name = f"w{index}"
-        specs.append(
-            (
-                name,
-                _build_instance_command(
-                    config,
-                    paths,
-                    name,
-                    paths.main,
-                    args_builder=build_common_no_cmplog_args,
-                    role="worker",
-                ),
-            )
+) -> FuzzerSpecs:
+    worker_specs = [
+        (
+            f"w{index}",
+            _build_instance_command(
+                config,
+                paths,
+                f"w{index}",
+                paths.main,
+                args_builder=build_common_no_cmplog_args,
+                role="worker",
+            ),
         )
-    if paths.laf is not None:
-        specs.append(
-            (
+        for index in range(1, config.execution.n_workers + 1)
+    ]
+    laf_spec = (
+        (
+            "laf",
+            _build_instance_command(
+                config,
+                paths,
                 "laf",
-                _build_instance_command(
-                    config,
-                    paths,
-                    "laf",
-                    paths.laf,
-                    args_builder=build_common_no_cmplog_args,
-                ),
-            )
+                paths.laf,
+                args_builder=build_common_no_cmplog_args,
+            ),
         )
-    if paths.asan_main is not None:
-        for index in range(1, config.engine.asan_instances + 1):
-            name = f"asan{index}"
-            specs.append(
-                (
-                    name,
-                    _build_instance_command(
-                        config,
-                        paths,
-                        name,
-                        paths.asan_main,
-                        args_builder=build_asan_args,
-                        role="asan",
-                    ),
-                )
-            )
-    return tuple(specs)
+        if paths.laf is not None
+        else None
+    )
+    asan_specs = [
+        (
+            f"asan{index}",
+            _build_instance_command(
+                config,
+                paths,
+                f"asan{index}",
+                paths.asan_main,
+                args_builder=build_asan_args,
+                role="asan",
+            ),
+        )
+        for index in range(1, config.engine.asan_instances + 1)
+    ] if paths.asan_main is not None else []
+    return tuple(worker_specs + ([laf_spec] if laf_spec else []) + asan_specs)
 
 
 def build_campaign_specs(
     config: Config,
     paths: ResolvedPaths,
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
+) -> FuzzerSpecs:
     specs = [(MAIN_NAME, build_main_command(config, paths))]
     if paths.cmplog is not None:
         specs.append((CMPLOG_NAME, build_cmplog_command(config, paths)))
