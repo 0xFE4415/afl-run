@@ -3,12 +3,13 @@ from __future__ import annotations
 import os
 import selectors
 import shutil
+from collections.abc import Callable
 from contextlib import ExitStack
 from pathlib import Path
 
 from inotify_simple import INotify, flags
 
-from afl_run.config import Config
+from afl_run.config import Config, EngineConfig
 from afl_run.engine import (
     build_asan_args,
     build_cmplog_args,
@@ -24,71 +25,119 @@ CMPLOG_NAME = "cmplog"
 # that skew when deciding whether fuzzer_stats was written after launch.
 STATS_MTIME_SKEW_SECONDS = 1.0
 
+type Command = tuple[str, ...]
+type FuzzerSpec = tuple[str, Command]
+type FuzzerSpecs = tuple[FuzzerSpec, ...]
 
-def build_main_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
-    return _build_fuzzer_command(
+
+def build_main_command(config: Config, paths: ResolvedPaths) -> Command:
+    return _build_instance_command(
+        config,
         paths,
-        build_common_no_cmplog_args(config.engine, paths)
-        + build_instance_flags(config.engine, None, MAIN_NAME),
-        "-M",
         MAIN_NAME,
         paths.main,
+        args_builder=build_common_no_cmplog_args,
+        instance_flag="-M",
     )
 
 
-def build_cmplog_command(config: Config, paths: ResolvedPaths) -> tuple[str, ...]:
-    if paths.cmplog is None:
+def build_cmplog_command(config: Config, paths: ResolvedPaths) -> Command:
+    if not paths.cmplog:
         raise ValueError("CmpLog harness is not configured")
-    return _build_fuzzer_command(
+    return _build_instance_command(
+        config,
         paths,
-        build_cmplog_args(config.engine, paths)
-        + build_instance_flags(config.engine, None, CMPLOG_NAME),
-        "-S",
         CMPLOG_NAME,
         paths.main,
+        args_builder=build_cmplog_args,
     )
 
 
 def build_worker_specs(
     config: Config,
     paths: ResolvedPaths,
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    specs: list[tuple[str, tuple[str, ...]]] = []
-    common_args = build_common_no_cmplog_args(config.engine, paths)
+) -> FuzzerSpecs:
+    specs: list[FuzzerSpec] = []
     for index in range(1, config.execution.n_workers + 1):
-        name = f"w{index}"
-        args = common_args + build_instance_flags(config.engine, "worker", name)
-        specs.append((name, _build_fuzzer_command(paths, args, "-S", name, paths.main)))
-    if paths.laf is not None:
-        args = common_args + build_instance_flags(config.engine, None, "laf")
-        specs.append(("laf", _build_fuzzer_command(paths, args, "-S", "laf", paths.laf)))
-    if paths.asan_main is not None:
-        asan_args = build_asan_args(config.engine, paths)
+        specs.append(
+            (
+                f"w{index}",
+                _build_instance_command(
+                    config,
+                    paths,
+                    f"w{index}",
+                    paths.main,
+                    args_builder=build_common_no_cmplog_args,
+                    role="worker",
+                ),
+            )
+        )
+
+    if paths.laf:
+        specs.append(
+            (
+                "laf",
+                _build_instance_command(
+                    config,
+                    paths,
+                    "laf",
+                    paths.laf,
+                    args_builder=build_common_no_cmplog_args,
+                ),
+            )
+        )
+
+    if paths.asan:
         for index in range(1, config.engine.asan_instances + 1):
-            name = f"asan{index}"
-            args = asan_args + build_instance_flags(config.engine, "asan", name)
-            specs.append((name, _build_fuzzer_command(paths, args, "-S", name, paths.asan_main)))
+            specs.append(
+                (
+                    f"asan{index}",
+                    _build_instance_command(
+                        config,
+                        paths,
+                        f"asan{index}",
+                        paths.asan,
+                        args_builder=build_asan_args,
+                        role="asan",
+                    ),
+                )
+            )
+
     return tuple(specs)
 
 
 def build_campaign_specs(
     config: Config,
     paths: ResolvedPaths,
-) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    specs = [(MAIN_NAME, build_main_command(config, paths))]
-    if paths.cmplog is not None:
+) -> FuzzerSpecs:
+    specs: list[FuzzerSpec] = [(MAIN_NAME, build_main_command(config, paths))]
+    if paths.cmplog:
         specs.append((CMPLOG_NAME, build_cmplog_command(config, paths)))
     specs.extend(build_worker_specs(config, paths))
     return tuple(specs)
 
 
+def _build_instance_command(
+    config: Config,
+    paths: ResolvedPaths,
+    name: str,
+    target: Path,
+    *,
+    args_builder: Callable[[EngineConfig, ResolvedPaths], Command],
+    role: str | None = None,
+    instance_flag: str = "-S",
+) -> Command:
+    args = args_builder(config.engine, paths) + build_instance_flags(config.engine, role, name)
+    return _build_fuzzer_command(paths, args, instance_flag, name, target)
+
+
 def _build_fuzzer_command(
     paths: ResolvedPaths,
-    args: tuple[str, ...],
+    args: Command,
     instance_flag: str,
     instance_name: str,
     target: Path,
-) -> tuple[str, ...]:
+) -> Command:
     return (
         "afl-fuzz",
         "-i",

@@ -53,7 +53,7 @@ def test_afl_tmpdir_rejects_nonexistent(path: str, tmp_path: Path) -> None:
         main=st.just("main"),
         cmplog=st.none() | st.just("cmplog"),
         laf=st.none() | st.just("laf"),
-        asan_main=st.none() | st.just("asan"),
+        asan=st.none() | st.just("asan"),
         dictionary=st.none() | st.just("dict"),
         seeds_dir=st.just("seeds"),
         out_dir=st.just("out"),

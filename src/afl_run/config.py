@@ -27,7 +27,7 @@ class PathConfig(StrictModel):
     out_dir: str = Field(min_length=1)
     cmplog: str | None = Field(default=None, min_length=1)
     laf: str | None = Field(default=None, min_length=1)
-    asan_main: str | None = Field(default=None, min_length=1)
+    asan: str | None = Field(default=None, min_length=1)
     dictionary: str | None = Field(default=None, min_length=1)
 
 
@@ -125,7 +125,7 @@ class Config(StrictModel):
                 prefix, count, label = "w", self.execution.n_workers, "workers"
             else:
                 prefix, count, label = "asan", self.engine.asan_instances, "ASAN instances"
-                if self.paths.asan_main is None:
+                if self.paths.asan is None:
                     raise ValueError(f"flags reference {name!r} but no ASAN harness is configured")
             index = int(name.removeprefix(prefix))
             if not 1 <= index <= count:

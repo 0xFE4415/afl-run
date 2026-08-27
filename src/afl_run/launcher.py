@@ -117,19 +117,15 @@ class FuzzerGroup:
         return self._sleeping
 
     def toggle_sleep(self) -> bool:
-        """Toggle sleep (SIGSTOP) on every live fuzzer and its children.
-
-        Returns the new sleeping state: ``True`` when the fuzzers are now
-        asleep, ``False`` when they have been resumed.
-        """
-        self._sleeping = not self._sleeping
+        now_sleeping = not self._sleeping
+        self._sleeping = now_sleeping
         if self._dry_run:
-            return self._sleeping
-        signum = signal.SIGSTOP if self._sleeping else signal.SIGCONT
+            return now_sleeping
+        signal_to_send = signal.SIGSTOP if now_sleeping else signal.SIGCONT
         for fuzzer in self._fuzzers:
             if fuzzer.process.returncode is None:
-                _signal_process_group(fuzzer.pid, signum)
-        return self._sleeping
+                _signal_process_group(fuzzer.pid, signal_to_send)
+        return now_sleeping
 
     async def wait_for_main(
         self,
