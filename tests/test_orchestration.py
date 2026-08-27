@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from helpers import relative_paths
+from helpers import make_config, relative_paths
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -24,33 +24,8 @@ from afl_run.orchestration import (
 )
 
 
-def _config(
-    *,
-    execution: ExecutionConfig | None = None,
-    engine: EngineConfig | None = None,
-    paths: PathConfig | None = None,
-) -> Config:
-    return Config(
-        paths=paths
-        or PathConfig(
-            main="main",
-            cmplog="cmplog",
-            dictionary="dict",
-            seeds_dir="seeds",
-            out_dir="out",
-        ),
-        execution=execution or ExecutionConfig(),
-        engine=engine
-        or EngineConfig(
-            memory_limit_mb=1024,
-            memory_limit_cmplog_mb=2048,
-            skip_deterministic=True,
-        ),
-    )
-
-
 def test_build_main_command() -> None:
-    command = build_main_command(_config(), relative_paths())
+    command = build_main_command(make_config(), relative_paths())
     assert command == (
         "afl-fuzz",
         "-i",
@@ -74,7 +49,7 @@ def test_build_main_command() -> None:
 
 
 def test_build_cmplog_command() -> None:
-    command = build_cmplog_command(_config(), relative_paths())
+    command = build_cmplog_command(make_config(), relative_paths())
     assert command == (
         "afl-fuzz",
         "-i",
@@ -104,11 +79,14 @@ def test_build_cmplog_command_requires_harness() -> None:
     paths.cmplog = None
 
     with pytest.raises(ValueError, match="not configured"):
-        build_cmplog_command(_config(), paths)
+        build_cmplog_command(make_config(), paths)
 
 
 def test_build_worker_specs() -> None:
-    config = _config(execution=ExecutionConfig(n_workers=2), engine=EngineConfig(asan_instances=2))
+    config = make_config(
+        execution=ExecutionConfig(n_workers=2),
+        engine=EngineConfig(asan_instances=2),
+    )
     paths = relative_paths()
     paths.laf = Path("laf")
     paths.asan_main = Path("asan")
@@ -125,7 +103,7 @@ def test_build_worker_specs() -> None:
 
 
 def test_build_worker_specs_pairs_names_with_commands() -> None:
-    config = _config(execution=ExecutionConfig(n_workers=1))
+    config = make_config(execution=ExecutionConfig(n_workers=1))
     paths = relative_paths()
     paths.laf = Path("laf")
 
@@ -139,7 +117,7 @@ def test_build_worker_specs_pairs_names_with_commands() -> None:
 
 
 def test_main_command_includes_main_flags() -> None:
-    config = _config(engine=EngineConfig(flags={"main": ("-p", "explore")}))
+    config = make_config(engine=EngineConfig(flags={"main": ("-p", "explore")}))
 
     command = build_main_command(config, relative_paths())
 
@@ -147,7 +125,7 @@ def test_main_command_includes_main_flags() -> None:
 
 
 def test_cmplog_command_includes_cmplog_flags() -> None:
-    config = _config(engine=EngineConfig(flags={"cmplog": ("-L", "0")}))
+    config = make_config(engine=EngineConfig(flags={"cmplog": ("-L", "0")}))
 
     command = build_cmplog_command(config, relative_paths())
 
@@ -155,7 +133,7 @@ def test_cmplog_command_includes_cmplog_flags() -> None:
 
 
 def test_worker_flags_apply_role_then_instance() -> None:
-    config = _config(
+    config = make_config(
         execution=ExecutionConfig(n_workers=2),
         engine=EngineConfig(flags={"worker": ("-p", "rare"), "w2": ("-L", "0")}),
     )
@@ -168,7 +146,7 @@ def test_worker_flags_apply_role_then_instance() -> None:
 
 
 def test_worker_role_does_not_apply_to_laf() -> None:
-    config = _config(
+    config = make_config(
         execution=ExecutionConfig(n_workers=1),
         engine=EngineConfig(flags={"worker": ("-p", "rare"), "laf": ("-p", "seek")}),
         paths=PathConfig(main="main", cmplog="cmplog", laf="laf", seeds_dir="seeds", out_dir="out"),
@@ -184,7 +162,7 @@ def test_worker_role_does_not_apply_to_laf() -> None:
 
 
 def test_asan_flags_apply_role_then_instance() -> None:
-    config = _config(
+    config = make_config(
         engine=EngineConfig(
             asan_instances=2,
             flags={"asan": ("-p", "fast"), "asan2": ("-L", "0")},
@@ -204,7 +182,7 @@ def test_asan_flags_apply_role_then_instance() -> None:
 
 
 def test_build_campaign_specs_orders_main_before_other_fuzzers() -> None:
-    config = _config(execution=ExecutionConfig(n_workers=1))
+    config = make_config(execution=ExecutionConfig(n_workers=1))
     paths = relative_paths()
     paths.laf = Path("laf")
 

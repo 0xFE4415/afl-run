@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from click.testing import CliRunner
+from helpers import harness, replace_config_fields, tmp_dir, tmp_file, valid_path_config
 from hypothesis import given
 from hypothesis import strategies as st
 from pydantic import ValidationError
@@ -13,24 +14,6 @@ from pydantic import ValidationError
 from afl_run.cli import main
 from afl_run.config import Config, PathConfig
 from afl_run.paths import ResolvedPaths, resolve_paths
-
-
-def _harness(path: Path) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("")
-    path.chmod(0o755)
-    return path
-
-
-def _file(path: Path) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("")
-    return path
-
-
-def _dir(path: Path) -> Path:
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def _valid_config(
@@ -42,28 +25,16 @@ def _valid_config(
     dictionary: bool = True,
 ) -> Config:
     return Config(
-        paths=PathConfig(
-            main=str(_harness(tmp_path / "build-afl" / "afl_harness")),
-            cmplog=(str(_harness(tmp_path / "build-afl-cmp" / "afl_harness")) if cmplog else None),
-            laf=str(_harness(tmp_path / "build-afl-laf" / "afl_harness")) if laf else None,
-            asan_main=str(_harness(tmp_path / "build-asan" / "afl_harness")) if asan else None,
-            dictionary=str(_file(tmp_path / "x86.dict")) if dictionary else None,
-            seeds_dir=str(_dir(tmp_path / "seeds")),
-            out_dir=str(_dir(tmp_path / "out")),
-        )
+        paths=valid_path_config(tmp_path, cmplog=cmplog, laf=laf, asan=asan, dictionary=dictionary)
     )
 
 
 def _replace_paths(cfg: Config, **updates: str | None) -> Config:
-    return Config.model_validate(
-        {**cfg.model_dump(), "paths": {**cfg.paths.model_dump(), **updates}}
-    )
+    return replace_config_fields(cfg, paths=updates)
 
 
 def _replace_engine(cfg: Config, **updates: str | None) -> Config:
-    return Config.model_validate(
-        {**cfg.model_dump(), "engine": {**cfg.engine.model_dump(), **updates}}
-    )
+    return replace_config_fields(cfg, engine=updates)
 
 
 def test_resolve_all_provided(tmp_path: Path) -> None:
@@ -111,8 +82,8 @@ def test_optional_paths_resolve_for_all_configurations(
 
 
 def test_minimal_paths_leave_cmplog_unconfigured_without_dictionary(tmp_path: Path) -> None:
-    main = _harness(tmp_path / "main")
-    seeds = _dir(tmp_path / "seeds")
+    main = harness(tmp_path / "main")
+    seeds = tmp_dir(tmp_path / "seeds")
     out = tmp_path / "out"
     cfg = Config(paths=PathConfig(main=str(main), seeds_dir=str(seeds), out_dir=str(out)))
 
@@ -161,7 +132,7 @@ def test_nonexistent_optional_harness(field: str, message: str, tmp_path: Path) 
 
 
 def test_out_dir_rejected_when_existing_file(tmp_path: Path) -> None:
-    out_file = _file(tmp_path / "outfile")
+    out_file = tmp_file(tmp_path / "outfile")
     cfg = _replace_paths(_valid_config(tmp_path), out_dir=str(out_file))
 
     with pytest.raises(ValueError, match="out_dir"):
@@ -238,7 +209,7 @@ def test_cli_reports_missing_path(tmp_path: Path) -> None:
 
 
 def test_cli_reports_out_dir_not_a_directory(tmp_path: Path) -> None:
-    out_file = _file(tmp_path / "outfile")
+    out_file = tmp_file(tmp_path / "outfile")
     cfg = _replace_paths(_valid_config(tmp_path), out_dir=str(out_file))
     config_path = tmp_path / "config.json"
     config_path.write_text(cfg.model_dump_json())

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
+from helpers import mock_process
 
 from afl_run.launcher import (
     STARTUP_WARNING_SECONDS,
@@ -27,12 +28,6 @@ from afl_run.launcher import (
     _warn_if_startup_is_slow,
     launch_fuzzer,
 )
-
-
-def _process(returncode: int | None = None, pid: int = 1) -> MagicMock:
-    process = MagicMock(pid=pid, returncode=returncode)
-    process.wait = AsyncMock(return_value=returncode or 0)
-    return process
 
 
 class _PendingProcess:
@@ -86,7 +81,7 @@ class _ErrorProcess:
 
 
 def test_launch_fuzzer_sets_log_and_tmpdir(tmp_path: Path, caplog) -> None:
-    process = _process(pid=42)
+    process = mock_process(pid=42)
     caplog.set_level(logging.INFO, logger="afl_run.launcher")
 
     async def run() -> FuzzerProcess:
@@ -132,7 +127,7 @@ def test_launch_fuzzer_closes_log_when_start_fails(tmp_path: Path) -> None:
 def test_launch_fuzzer_appends_existing_log_on_resume(tmp_path: Path) -> None:
     log_path = tmp_path / "main.log"
     log_path.write_bytes(b"previous output\n")
-    process = _process(pid=42)
+    process = mock_process(pid=42)
 
     async def run() -> FuzzerProcess:
         with patch(
@@ -149,7 +144,7 @@ def test_launch_fuzzer_appends_existing_log_on_resume(tmp_path: Path) -> None:
 
 
 def test_fuzzer_group_tracks_launched_fuzzer() -> None:
-    fuzzer = FuzzerProcess("main", _process(), Path("main.log"), MagicMock())
+    fuzzer = FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock())
 
     async def run() -> None:
         with patch("afl_run.launcher.launch_fuzzer", new=AsyncMock(return_value=fuzzer)):
@@ -174,8 +169,8 @@ def test_dry_run_group_does_not_spawn_processes() -> None:
 
 
 def test_fuzzer_group_terminates_processes_on_exit() -> None:
-    live_process = _process()
-    dead_process = _process(returncode=1)
+    live_process = mock_process()
+    dead_process = mock_process(returncode=1)
     live_log = MagicMock()
     dead_log = MagicMock()
     live = FuzzerProcess("live", live_process, Path("live.log"), live_log)
@@ -196,7 +191,7 @@ def test_fuzzer_group_terminates_processes_on_exit() -> None:
 
 def test_fuzzer_group_kills_processes_that_ignore_terminate() -> None:
     process = _StubbornProcess()
-    exited_process = _process()
+    exited_process = mock_process()
     exited_process.terminate.side_effect = lambda: setattr(exited_process, "returncode", 0)
     log = MagicMock()
     exited_log = MagicMock()
@@ -214,9 +209,9 @@ def test_fuzzer_group_kills_processes_that_ignore_terminate() -> None:
     exited_log.close.assert_called_once_with()
 
 
-def test_fuzzer_group_reports_dead_process() -> None:
+def test_fuzzer_group_reports_deadmock_process() -> None:
     log = MagicMock()
-    process = _process(returncode=1)
+    process = mock_process(returncode=1)
     fuzzer = FuzzerProcess("main", process, Path("main.log"), log)
 
     async def run() -> None:
@@ -230,8 +225,8 @@ def test_fuzzer_group_reports_dead_process() -> None:
 
 
 def test_abort_if_any_died_reports_all_dead_processes() -> None:
-    first = FuzzerProcess("first", _process(returncode=1), Path("first.log"), MagicMock())
-    second = FuzzerProcess("second", _process(returncode=2), Path("second.log"), MagicMock())
+    first = FuzzerProcess("first", mock_process(returncode=1), Path("first.log"), MagicMock())
+    second = FuzzerProcess("second", mock_process(returncode=2), Path("second.log"), MagicMock())
 
     async def run() -> None:
         with pytest.raises(RuntimeError) as error:
@@ -263,7 +258,7 @@ def _launch_probe() -> subprocess.Popen[bytes]:
 
 def test_wait_for_main_warns_when_startup_is_slow(caplog) -> None:
     caplog.set_level(logging.WARNING, logger="afl_run.launcher")
-    fuzzer = FuzzerProcess("main", _process(), Path("main.log"), MagicMock())
+    fuzzer = FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock())
 
     def slow_waiter(stats_path: Path, main: ProcessLike, since: float) -> None:
         time.sleep(0.2)
@@ -289,7 +284,7 @@ def test_wait_for_main_does_not_warn_on_fast_startup(caplog) -> None:
         group = FuzzerGroup()
         await group.wait_for_main(
             Path("stats"),
-            FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
+            FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock()),
             waiter,
             0.0,
         )
@@ -350,7 +345,7 @@ def test_wait_for_main_propagates_waiter_error() -> None:
         group = FuzzerGroup()
         await group.wait_for_main(
             Path("stats"),
-            FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
+            FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock()),
             failing_waiter,
             0.0,
         )
@@ -371,7 +366,7 @@ def test_wait_for_main_propagates_stuck_watchdog_error() -> None:
         with patch("afl_run.launcher._monitor_main_startup", new=stuck_monitor):
             await group.wait_for_main(
                 Path("stats"),
-                FuzzerProcess("main", _process(), Path("main.log"), MagicMock()),
+                FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock()),
                 slow_waiter,
                 0.0,
             )
@@ -508,7 +503,7 @@ def test_sample_liveness_reads_proc_and_log(tmp_path: Path) -> None:
     assert sample[2] == 3
 
 
-def test_sample_liveness_returns_none_for_missing_process(tmp_path: Path) -> None:
+def test_sample_liveness_returns_none_for_missingmock_process(tmp_path: Path) -> None:
     assert _sample_liveness(-1, tmp_path / "main.log") is None
 
 
@@ -535,7 +530,7 @@ def test_format_size(size_bytes: int, expected: str) -> None:
 
 def test_fuzzer_group_cancels_other_waiters() -> None:
     pending_process = _PendingProcess()
-    first = FuzzerProcess("first", _process(returncode=1), Path("first.log"), MagicMock())
+    first = FuzzerProcess("first", mock_process(returncode=1), Path("first.log"), MagicMock())
     pending = FuzzerProcess("pending", pending_process, Path("pending.log"), MagicMock())
 
     async def run() -> None:
@@ -549,8 +544,8 @@ def test_fuzzer_group_cancels_other_waiters() -> None:
 
 
 def test_fuzzer_group_toggle_sleep_stops_and_continues_live_processes() -> None:
-    live = FuzzerProcess("live", _process(), Path("live.log"), MagicMock())
-    dead = FuzzerProcess("dead", _process(returncode=1), Path("dead.log"), MagicMock())
+    live = FuzzerProcess("live", mock_process(), Path("live.log"), MagicMock())
+    dead = FuzzerProcess("dead", mock_process(returncode=1), Path("dead.log"), MagicMock())
 
     async def run() -> None:
         async with FuzzerGroup((live, dead)) as group:

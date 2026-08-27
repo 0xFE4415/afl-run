@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
+from helpers import mock_fuzzer, tmp_executable
 
 from afl_run.cli import _run_campaign, _run_campaign_with_signals, main
 from afl_run.config import Config, ExecutionConfig, PathConfig
@@ -50,12 +51,6 @@ def _config(
     return cfg, paths
 
 
-def _fuzzer(name: str) -> FuzzerProcess:
-    process = MagicMock(pid=1, returncode=None)
-    process.wait = AsyncMock(return_value=0)
-    return FuzzerProcess(name, process, Path(f"{name}.log"), MagicMock())
-
-
 def _make_launch_recorder() -> tuple[list[str], Callable[..., Awaitable[FuzzerProcess]]]:
     launched: list[str] = []
 
@@ -66,7 +61,7 @@ def _make_launch_recorder() -> tuple[list[str], Callable[..., Awaitable[FuzzerPr
         **kwargs: object,
     ) -> FuzzerProcess:
         launched.append(name)
-        return _fuzzer(name)
+        return mock_fuzzer(name)
 
     return launched, launch
 
@@ -136,7 +131,7 @@ def test_run_campaign_end_to_end_with_stub_afl_fuzz(tmp_path: Path, monkeypatch)
         "while :; do sleep 1; done\n"
     )
     stub.chmod(0o755)
-    harness = _tmp_executable(tmp_path / "harness")
+    harness = tmp_executable(tmp_path / "harness")
     seeds = tmp_path / "seeds"
     seeds.mkdir()
     cfg = Config(
@@ -158,15 +153,9 @@ def test_run_campaign_end_to_end_with_stub_afl_fuzz(tmp_path: Path, monkeypatch)
     assert (paths.out_dir / "main" / "fuzzer_stats").is_file()
 
 
-def _tmp_executable(path: Path) -> Path:
-    path.write_text("")
-    path.chmod(0o755)
-    return path
-
-
 def test_run_campaign_terminates_started_fuzzers_on_failure(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path)
-    main = _fuzzer("main")
+    main = mock_fuzzer("main")
 
     with (
         patch("afl_run.cli.configure_host"),
@@ -336,7 +325,7 @@ def _run_with_signals(cfg, paths, no_sleep: bool, loop: MagicMock) -> None:
         patch("afl_run.cli.FuzzerGroup") as group_cls,
     ):
         group = group_cls.return_value.__enter__.return_value
-        group.launch = AsyncMock(return_value=_fuzzer("main"))
+        group.launch = AsyncMock(return_value=mock_fuzzer("main"))
         group.wait_for_main = AsyncMock()
         group.abort_if_any_died = AsyncMock()
         asyncio.run(_run_campaign_with_signals(cfg, paths, False, no_sleep=no_sleep))
