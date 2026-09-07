@@ -54,5 +54,15 @@ target-version = "py313"
 select = ["E", "F", "I", "W", "UP"]
 ignore = ["D"]
 
+[tool.ty.rules]
+all = "error"
+
+[tool.ty.analysis]
+strict-equality-semantics = true
+strict-generic-narrowing = true
+
+[tool.ty.src]
+include = ["src", "tests"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
