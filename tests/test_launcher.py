@@ -36,11 +36,16 @@ class _PendingProcess:
 
     def __init__(self) -> None:
         self.calls = 0
+        self.cancelled = False
 
     async def wait(self) -> int:
         self.calls += 1
         if self.calls == 1:
-            await asyncio.Future()
+            try:
+                await asyncio.Future()
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
         return 1
 
     def terminate(self) -> None:
@@ -209,7 +214,7 @@ def test_fuzzer_group_kills_processes_that_ignore_terminate() -> None:
     exited_log.close.assert_called_once_with()
 
 
-def test_fuzzer_group_reports_deadmock_process() -> None:
+def test_fuzzer_group_reports_dead_process() -> None:
     log = MagicMock()
     process = mock_process(returncode=1)
     fuzzer = FuzzerProcess("main", process, Path("main.log"), log)
@@ -470,7 +475,8 @@ def test_monitor_counts_log_growth_as_progress(tmp_path: Path) -> None:
                 with log_path.open("ab") as log_file:
                     log_file.write(b"x")
             monitor.cancel()
-            await asyncio.gather(monitor, return_exceptions=True)
+            result = (await asyncio.gather(monitor, return_exceptions=True))[0]
+            assert result is None or isinstance(result, asyncio.CancelledError)
 
     try:
         asyncio.run(run())
@@ -541,6 +547,7 @@ def test_fuzzer_group_cancels_other_waiters() -> None:
     asyncio.run(run())
 
     assert pending_process.calls == 2
+    assert pending_process.cancelled is True
 
 
 def test_fuzzer_group_toggle_sleep_stops_and_continues_live_processes() -> None:
