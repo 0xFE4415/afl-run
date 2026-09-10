@@ -324,11 +324,15 @@ def _run_with_signals(cfg, paths, no_sleep: bool, loop: MagicMock) -> None:
         ),
         patch("afl_run.cli.FuzzerGroup") as group_cls,
     ):
-        group = group_cls.return_value.__enter__.return_value
+        group = group_cls.return_value.__aenter__.return_value
         group.launch = AsyncMock(return_value=mock_fuzzer("main"))
         group.wait_for_main = AsyncMock()
         group.abort_if_any_died = AsyncMock()
+        group_cls.return_value.__aexit__.return_value = False
         asyncio.run(_run_campaign_with_signals(cfg, paths, False, no_sleep=no_sleep))
+        group.launch.assert_awaited_once()
+        group.wait_for_main.assert_awaited_once()
+        group.abort_if_any_died.assert_awaited_once()
 
 
 def test_run_campaign_with_signals_registers_sleep_when_enabled(tmp_path: Path) -> None:
