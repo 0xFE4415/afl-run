@@ -131,6 +131,30 @@ def test_nonexistent_optional_harness(field: str, message: str, tmp_path: Path) 
         resolve_paths(cfg)
 
 
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("main", "MAIN harness"),
+        ("cmplog", "CMPLOG harness"),
+        ("laf", "LAF harness"),
+        ("asan", "ASAN harness"),
+    ],
+)
+def test_non_executable_harness(field: str, message: str, tmp_path: Path) -> None:
+    plain = tmp_file(tmp_path / "plain")
+    cfg = _replace_paths(_valid_config(tmp_path), **{field: str(plain)})
+
+    with pytest.raises(ValueError, match=f"{message} is not executable"):
+        resolve_paths(cfg)
+
+
+def test_non_executable_dictionary_is_accepted(tmp_path: Path) -> None:
+    dictionary = tmp_file(tmp_path / "plain.dict")
+    cfg = _replace_paths(_valid_config(tmp_path), dictionary=str(dictionary))
+
+    assert resolve_paths(cfg).dictionary == dictionary
+
+
 def test_out_dir_rejected_when_existing_file(tmp_path: Path) -> None:
     out_file = tmp_file(tmp_path / "outfile")
     cfg = _replace_paths(_valid_config(tmp_path), out_dir=str(out_file))

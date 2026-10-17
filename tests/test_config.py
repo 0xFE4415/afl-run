@@ -81,10 +81,20 @@ def test_out_dir_containing_afl_tmpdir_is_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize("field", ["main", "cmplog", "laf", "asan", "dictionary"])
+def test_out_dir_containing_harness_or_dictionary_is_rejected(field: str) -> None:
+    with pytest.raises(ValidationError, match=field):
+        _config_with_protected(field, f"campaign/{field}", "campaign")
+
+
 def _config_with_protected(field: str, protected: str, out_dir: str) -> Config:
     return Config(
         paths=PathConfig(
-            main="main",
+            main=protected if field == "main" else "main",
+            cmplog=protected if field == "cmplog" else None,
+            laf=protected if field == "laf" else None,
+            asan=protected if field == "asan" else None,
+            dictionary=protected if field == "dictionary" else None,
             seeds_dir=protected if field == "seeds_dir" else "seeds",
             out_dir=out_dir,
         ),
@@ -106,7 +116,18 @@ _path_suffix = st.lists(
 
 
 @given(
-    field=st.sampled_from(["seeds_dir", "log_dir", "afl_tmpdir"]),
+    field=st.sampled_from(
+        [
+            "seeds_dir",
+            "log_dir",
+            "afl_tmpdir",
+            "main",
+            "cmplog",
+            "laf",
+            "asan",
+            "dictionary",
+        ]
+    ),
     prefix=_path_segments,
     suffix=_path_suffix,
 )
@@ -121,7 +142,18 @@ def test_out_dir_overlapping_protected_directory_is_rejected(
 
 
 @given(
-    field=st.sampled_from(["seeds_dir", "log_dir", "afl_tmpdir"]),
+    field=st.sampled_from(
+        [
+            "seeds_dir",
+            "log_dir",
+            "afl_tmpdir",
+            "main",
+            "cmplog",
+            "laf",
+            "asan",
+            "dictionary",
+        ]
+    ),
     out_segments=_path_segments,
     protected_segments=_path_segments,
 )

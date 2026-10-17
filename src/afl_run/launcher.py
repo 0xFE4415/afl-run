@@ -335,7 +335,7 @@ def _signal_process_group(pid: int, signum: signal.Signals) -> None:
         LOGGER.warning("could not signal fuzzer process group %d: %s", pid, error)
 
 
-def _handle_sleep_signal(group: FuzzerGroup) -> None:
+def handle_sleep_signal(group: FuzzerGroup) -> None:
     if group.toggle_sleep():
         LOGGER.info("fuzzers sleeping; press Ctrl-Z to resume")
     else:

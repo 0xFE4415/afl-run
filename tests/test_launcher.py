@@ -18,7 +18,6 @@ from afl_run.launcher import (
     ProcessLike,
     _abort_if_any_died,
     _format_size,
-    _handle_sleep_signal,
     _has_liveness_progressed,
     _LivenessSample,
     _log_liveness,
@@ -26,6 +25,7 @@ from afl_run.launcher import (
     _sample_liveness,
     _signal_process_group,
     _warn_if_startup_is_slow,
+    handle_sleep_signal,
     launch_fuzzer,
 )
 
@@ -594,9 +594,9 @@ def test_handle_sleep_signal_logs_sleep_and_resume(caplog) -> None:
 
     async def run() -> None:
         async with FuzzerGroup() as group:
-            _handle_sleep_signal(group)
+            handle_sleep_signal(group)
             assert "fuzzers sleeping" in caplog.text
-            _handle_sleep_signal(group)
+            handle_sleep_signal(group)
             assert "fuzzers resumed" in caplog.text
 
     asyncio.run(run())

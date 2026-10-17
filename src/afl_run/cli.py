@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import signal
 import time
 from pathlib import Path
@@ -11,7 +12,7 @@ import click
 from afl_run.config import Config
 from afl_run.environment import build_environment
 from afl_run.host import configure_host
-from afl_run.launcher import FuzzerGroup, _handle_sleep_signal
+from afl_run.launcher import FuzzerGroup, handle_sleep_signal
 from afl_run.orchestration import (
     MAIN_NAME,
     build_campaign_specs,
@@ -22,6 +23,14 @@ from afl_run.paths import ResolvedPaths, resolve_paths
 
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+
+def _require_afl_fuzz() -> None:
+    # Fail before host configuration and the optional --fresh reset destroy
+    # anything; a missing binary would otherwise abort the campaign only
+    # after those steps have already run.
+    if shutil.which("afl-fuzz") is None:
+        raise RuntimeError("afl-fuzz not found in PATH")
 
 
 @click.command()
@@ -54,7 +63,7 @@ def main(
     try:
         config = Config.model_validate_json(Path(config_path).read_text())
         resolved = resolve_paths(config)
-    except ValueError as error:
+    except (ValueError, OSError) as error:
         raise click.ClickException(str(error)) from error
     try:
         asyncio.run(_run_campaign(config, resolved, timeout, fresh, dry_run, no_sleep))
@@ -98,6 +107,7 @@ async def _run_campaign_with_signals(
 ) -> None:
     loop = asyncio.get_running_loop()
     if not dry_run:
+        _require_afl_fuzz()
         await asyncio.to_thread(configure_host, config.host)
         tmp_root = resolved.afl_tmpdir
         if fresh:
@@ -111,7 +121,7 @@ async def _run_campaign_with_signals(
     append_logs = not fresh
     async with FuzzerGroup(dry_run=dry_run) as group:
         if not no_sleep:
-            loop.add_signal_handler(signal.SIGTSTP, lambda: _handle_sleep_signal(group))
+            loop.add_signal_handler(signal.SIGTSTP, lambda: handle_sleep_signal(group))
         try:
             specs = build_campaign_specs(config, resolved)
             main_name, main_command = specs[0]
