@@ -67,8 +67,9 @@ afl-run --dry-run config.json
 ```
 
 Use `--fresh` to remove the existing campaign output before starting. The
-configuration is rejected when `out_dir` equals or contains the configured
-seed, log, or AFL temporary directory.
+configuration is rejected when `out_dir` equals or contains the configured seed,
+log, or AFL temporary directory, any harness, or the dictionary, so a fresh
+campaign cannot delete them.
 
 Use `--no-sleep` to disable the `Ctrl-Z` sleep behaviour described below.
 

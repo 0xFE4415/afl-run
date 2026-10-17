@@ -100,6 +100,11 @@ class Config(StrictModel):
             ("seeds_dir", self.paths.seeds_dir),
             ("log_dir", self.execution.log_dir),
             ("afl_tmpdir", self.engine.afl_tmpdir),
+            ("main", self.paths.main),
+            ("cmplog", self.paths.cmplog),
+            ("laf", self.paths.laf),
+            ("asan", self.paths.asan),
+            ("dictionary", self.paths.dictionary),
         )
         for name, value in protected:
             if value is not None and Path(value).resolve().is_relative_to(out_dir):
