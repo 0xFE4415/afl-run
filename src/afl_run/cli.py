@@ -12,7 +12,7 @@ import click
 from afl_run.config import Config
 from afl_run.environment import build_environment
 from afl_run.host import configure_host
-from afl_run.launcher import FuzzerGroup, _handle_sleep_signal
+from afl_run.launcher import FuzzerGroup, handle_sleep_signal
 from afl_run.orchestration import (
     MAIN_NAME,
     build_campaign_specs,
@@ -121,7 +121,7 @@ async def _run_campaign_with_signals(
     append_logs = not fresh
     async with FuzzerGroup(dry_run=dry_run) as group:
         if not no_sleep:
-            loop.add_signal_handler(signal.SIGTSTP, lambda: _handle_sleep_signal(group))
+            loop.add_signal_handler(signal.SIGTSTP, lambda: handle_sleep_signal(group))
         try:
             specs = build_campaign_specs(config, resolved)
             main_name, main_command = specs[0]
