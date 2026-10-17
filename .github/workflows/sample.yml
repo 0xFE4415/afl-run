@@ -39,6 +39,14 @@ jobs:
         run: |
           cmake -S sample -B sample/build-afl -DCMAKE_CXX_COMPILER=afl-c++
           cmake --build sample/build-afl
+      - name: Build advanced harness variants
+        run: |
+          AFL_LLVM_CMPLOG=1 cmake -S sample -B sample/build-cmplog -DCMAKE_CXX_COMPILER=afl-c++
+          AFL_LLVM_CMPLOG=1 cmake --build sample/build-cmplog
+          AFL_LLVM_LAF_ALL=1 cmake -S sample -B sample/build-laf -DCMAKE_CXX_COMPILER=afl-c++
+          AFL_LLVM_LAF_ALL=1 cmake --build sample/build-laf
+          AFL_USE_ASAN=1 cmake -S sample -B sample/build-asan -DCMAKE_CXX_COMPILER=afl-c++
+          AFL_USE_ASAN=1 cmake --build sample/build-asan
       - name: Run short campaign
         env:
           AFL_NO_AFFINITY: "1"
@@ -56,3 +64,26 @@ jobs:
             exit 1
           fi
           ls sample/fuzz/out/main
+      - name: Run short advanced campaign
+        env:
+          AFL_NO_AFFINITY: "1"
+          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
+        run: |
+          uv run afl-run --fresh --timeout 10 sample/advanced-config.json
+      - name: Verify advanced campaign output
+        run: |
+          missing=0
+          for instance in main cmplog laf asan1 w1 w2; do
+            if ! test -f "sample/fuzz/out-advanced/$instance/fuzzer_stats"; then
+              echo "AFL++ did not create fuzzer_stats for instance '$instance'"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "sample/fuzz/out-advanced contents:"
+            find sample/fuzz/out-advanced -maxdepth 4 -print
+            echo "instance logs:"
+            find sample/fuzz/logs-advanced -type f -name '*.log' -print -exec tail -n 30 {} \;
+            exit 1
+          fi
+          ls sample/fuzz/out-advanced
