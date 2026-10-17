@@ -27,14 +27,14 @@ class ResolvedPaths:
 def resolve_paths(config: Config) -> ResolvedPaths:
     resolved = ResolvedPaths(
         main=Path(config.paths.main),
-        cmplog=Path(config.paths.cmplog) if config.paths.cmplog else None,
-        laf=Path(config.paths.laf) if config.paths.laf else None,
-        asan=Path(config.paths.asan) if config.paths.asan else None,
-        dictionary=Path(config.paths.dictionary) if config.paths.dictionary else None,
+        cmplog=Path(config.paths.cmplog) if config.paths.cmplog is not None else None,
+        laf=Path(config.paths.laf) if config.paths.laf is not None else None,
+        asan=Path(config.paths.asan) if config.paths.asan is not None else None,
+        dictionary=Path(config.paths.dictionary) if config.paths.dictionary is not None else None,
         seeds_dir=Path(config.paths.seeds_dir),
         out_dir=Path(config.paths.out_dir),
         log_dir=Path(config.execution.log_dir),
-        afl_tmpdir=Path(config.engine.afl_tmpdir) if config.engine.afl_tmpdir else None,
+        afl_tmpdir=Path(config.engine.afl_tmpdir) if config.engine.afl_tmpdir is not None else None,
     )
     _validate(resolved)
     return resolved
