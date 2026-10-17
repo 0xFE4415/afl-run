@@ -213,6 +213,17 @@ def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
     exit_group.assert_awaited_once()
 
 
+def test_main_reports_config_read_failure(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text("{}")
+
+    with patch("pathlib.Path.read_text", side_effect=OSError("read failed")):
+        result = CliRunner().invoke(main, [str(config_path)])
+
+    assert result.exit_code == 1
+    assert "Error: read failed" in result.output
+
+
 def test_main_handles_campaign_cancellation(tmp_path: Path, caplog) -> None:
     caplog.set_level(logging.INFO)
     config_path = tmp_path / "config.json"

@@ -54,7 +54,7 @@ def main(
     try:
         config = Config.model_validate_json(Path(config_path).read_text())
         resolved = resolve_paths(config)
-    except ValueError as error:
+    except (ValueError, OSError) as error:
         raise click.ClickException(str(error)) from error
     try:
         asyncio.run(_run_campaign(config, resolved, timeout, fresh, dry_run, no_sleep))
