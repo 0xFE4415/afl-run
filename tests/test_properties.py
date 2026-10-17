@@ -25,6 +25,8 @@ def test_afl_tmpdir_rejects_nonexistent(path: str, tmp_path: Path) -> None:
     main.write_text("")
     cmplog.write_text("")
     dictionary.write_text("")
+    main.chmod(0o755)
+    cmplog.chmod(0o755)
     seeds = tmp_path / "seeds"
     seeds.mkdir()
     cfg = Config(

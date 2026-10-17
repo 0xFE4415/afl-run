@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,19 +45,25 @@ def _require_file(path: Path, what: str) -> None:
         raise PathValidationError(f"missing {what}: {path}")
 
 
+def _require_executable(path: Path, what: str) -> None:
+    _require_file(path, what)
+    if not os.access(path, os.X_OK):
+        raise PathValidationError(f"{what} is not executable: {path}")
+
+
 def _require_dir(path: Path, what: str) -> None:
     if not path.is_dir():
         raise PathValidationError(f"missing {what}: {path}")
 
 
 def _validate(resolved_paths: ResolvedPaths) -> None:
-    _require_file(resolved_paths.main, "MAIN harness")
+    _require_executable(resolved_paths.main, "MAIN harness")
     if resolved_paths.cmplog is not None:
-        _require_file(resolved_paths.cmplog, "CMPLOG harness")
+        _require_executable(resolved_paths.cmplog, "CMPLOG harness")
     if resolved_paths.laf is not None:
-        _require_file(resolved_paths.laf, "LAF harness")
+        _require_executable(resolved_paths.laf, "LAF harness")
     if resolved_paths.asan is not None:
-        _require_file(resolved_paths.asan, "ASAN harness")
+        _require_executable(resolved_paths.asan, "ASAN harness")
     if resolved_paths.dictionary is not None:
         _require_file(resolved_paths.dictionary, "dictionary")
     _require_dir(resolved_paths.seeds_dir, "seeds dir")
