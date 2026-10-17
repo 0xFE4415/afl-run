@@ -54,6 +54,7 @@ jobs:
         run: |
           uv run afl-run --fresh --timeout 5 sample/config.json
       - name: Verify campaign output
+        if: always()
         run: |
           if ! test -f sample/fuzz/out/main/fuzzer_stats; then
             echo "AFL++ did not create fuzzer_stats"
@@ -71,6 +72,7 @@ jobs:
         run: |
           uv run afl-run --fresh --timeout 10 sample/advanced-config.json
       - name: Verify advanced campaign output
+        if: always()
         run: |
           missing=0
           for instance in main cmplog laf asan1 w1 w2; do
