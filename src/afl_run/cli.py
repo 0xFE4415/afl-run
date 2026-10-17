@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
 import signal
 import time
 from pathlib import Path
@@ -22,6 +23,14 @@ from afl_run.paths import ResolvedPaths, resolve_paths
 
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_SIGNALS = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+
+
+def _require_afl_fuzz() -> None:
+    # Fail before host configuration and the optional --fresh reset destroy
+    # anything; a missing binary would otherwise abort the campaign only
+    # after those steps have already run.
+    if shutil.which("afl-fuzz") is None:
+        raise RuntimeError("afl-fuzz not found in PATH")
 
 
 @click.command()
@@ -98,6 +107,7 @@ async def _run_campaign_with_signals(
 ) -> None:
     loop = asyncio.get_running_loop()
     if not dry_run:
+        _require_afl_fuzz()
         await asyncio.to_thread(configure_host, config.host)
         tmp_root = resolved.afl_tmpdir
         if fresh:

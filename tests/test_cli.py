@@ -72,6 +72,7 @@ def test_run_campaign_launches_main_cmplog_and_workers(tmp_path: Path, caplog) -
     launched, launch = _make_launch_recorder()
 
     with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
         patch("afl_run.cli.configure_host") as configure,
         patch("afl_run.cli.reset_output_directory") as prepare,
         patch("afl_run.cli.build_environment", return_value={"PATH": "/bin"}),
@@ -98,6 +99,7 @@ def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Pa
     launched, launch = _make_launch_recorder()
 
     with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.reset_output_directory") as prepare,
         patch("afl_run.cli.build_environment", return_value={}),
@@ -158,6 +160,7 @@ def test_run_campaign_terminates_started_fuzzers_on_failure(tmp_path: Path) -> N
     main = mock_fuzzer("main")
 
     with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.build_environment", return_value={}),
         patch("afl_run.cli.FuzzerGroup.launch", new=AsyncMock(return_value=main)),
@@ -180,6 +183,7 @@ def test_run_campaign_does_not_cleanup_if_host_setup_fails(tmp_path: Path) -> No
     cfg, paths = _config(tmp_path)
 
     with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
         patch("afl_run.cli.configure_host", side_effect=OSError("host failed")),
         patch(
             "afl_run.cli.FuzzerGroup.__aexit__",
@@ -196,6 +200,7 @@ def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path)
 
     with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.build_environment", return_value={}),
         patch(
@@ -300,6 +305,37 @@ def _close_and_raise(error: BaseException):
     return raise_error
 
 
+def test_run_campaign_requires_afl_fuzz_before_any_setup(tmp_path: Path) -> None:
+    cfg, paths = _config(tmp_path)
+
+    with (
+        patch("afl_run.cli.shutil.which", return_value=None),
+        patch("afl_run.cli.configure_host") as configure,
+        patch("afl_run.cli.reset_output_directory") as prepare,
+        patch("afl_run.cli.FuzzerGroup") as group_cls,
+    ):
+        with pytest.raises(RuntimeError, match="afl-fuzz not found in PATH"):
+            asyncio.run(_run_campaign(cfg, paths, fresh=True))
+
+    configure.assert_not_called()
+    prepare.assert_not_called()
+    group_cls.assert_not_called()
+
+
+def test_run_campaign_dry_run_skips_afl_fuzz_check(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    cfg, paths = _config(tmp_path)
+
+    with (
+        patch("afl_run.cli.shutil.which", return_value=None),
+        patch("afl_run.cli.configure_host") as configure,
+    ):
+        asyncio.run(_run_campaign(cfg, paths, dry_run=True))
+
+    configure.assert_not_called()
+    assert "would start main: afl-fuzz" in caplog.text
+
+
 def test_run_campaign_applies_timeout(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path)
 
@@ -326,6 +362,7 @@ def test_run_campaign_registers_and_removes_interrupt_signals(tmp_path: Path) ->
 
 def _run_with_signals(cfg, paths, no_sleep: bool, loop: MagicMock) -> None:
     with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
         patch("afl_run.cli.asyncio.get_running_loop", return_value=loop),
         patch("afl_run.cli.configure_host"),
         patch("afl_run.cli.build_environment", return_value={}),
