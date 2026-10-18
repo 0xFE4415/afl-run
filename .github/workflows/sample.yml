@@ -9,6 +9,9 @@ on:
       - src/**
       - pyproject.toml
 
+permissions:
+  contents: read
+
 concurrency:
   group: sample-${{ github.ref }}
   cancel-in-progress: true
