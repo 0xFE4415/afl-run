@@ -20,6 +20,9 @@ jobs:
   sample:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      AFL_NO_AFFINITY: "1"
+      AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
@@ -51,9 +54,6 @@ jobs:
           AFL_USE_ASAN=1 cmake -S sample -B sample/build-asan -DCMAKE_CXX_COMPILER=afl-c++
           AFL_USE_ASAN=1 cmake --build sample/build-asan
       - name: Run short campaign
-        env:
-          AFL_NO_AFFINITY: "1"
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
         run: |
           uv run afl-run --fresh --timeout 5 sample/config.json
       - name: Verify campaign output
@@ -61,17 +61,12 @@ jobs:
         run: |
           if ! test -f sample/fuzz/out/main/fuzzer_stats; then
             echo "AFL++ did not create fuzzer_stats"
-            echo "sample/fuzz contents:"
             find sample/fuzz -maxdepth 4 -print
-            echo "main.log files:"
-            find . -type f -name main.log -print -exec cat {} \;
+            find sample/fuzz/logs -type f -name main.log -print -exec cat {} \;
             exit 1
           fi
           ls sample/fuzz/out/main
       - name: Run short advanced campaign
-        env:
-          AFL_NO_AFFINITY: "1"
-          AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES: "1"
         run: |
           uv run afl-run --fresh --timeout 10 sample/advanced-config.json
       - name: Verify advanced campaign output
@@ -85,10 +80,8 @@ jobs:
             fi
           done
           if [ "$missing" -ne 0 ]; then
-            echo "sample/fuzz/out-advanced contents:"
             find sample/fuzz/out-advanced -maxdepth 4 -print
-            echo "instance logs:"
-            find sample/fuzz/logs-advanced -type f -name '*.log' -print -exec tail -n 30 {} \;
+            find sample/fuzz/logs-advanced -type f -name '*.log' -print -exec cat {} \;
             exit 1
           fi
           ls sample/fuzz/out-advanced
