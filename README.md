@@ -135,8 +135,9 @@ Example:
 unlimited (`null`). This is recommended because CmpLog can map substantially
 more memory; set it explicitly if the campaign requires a limit.
 
-Set `engine.skip_deterministic` to `true` to pass AFL++'s `-z` option. It is
-disabled by default for compatibility with older AFL++ releases.
+Set `engine.skip_deterministic` to `true` to pass AFL++'s `-z` option. The
+option requires AFL++ 4.20c or newer; it is disabled by default for
+compatibility with older AFL++ releases.
 
 ### Host Configuration
 
