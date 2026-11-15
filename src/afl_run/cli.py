@@ -5,19 +5,20 @@ import logging
 import shutil
 import signal
 import time
+from collections.abc import Iterable
+from contextlib import ExitStack
 from pathlib import Path
 
 import click
 
 from afl_run.config import Config
 from afl_run.environment import build_environment
-from afl_run.host import configure_host
-from afl_run.launcher import FuzzerGroup, handle_sleep_signal
+from afl_run.host import configured_host
+from afl_run.launcher import FuzzerGroup, FuzzerProcess, handle_sleep_signal
 from afl_run.orchestration import (
-    MAIN_NAME,
     build_campaign_specs,
     reset_output_directory,
-    wait_for_main,
+    wait_for_stats,
 )
 from afl_run.paths import ResolvedPaths, resolve_paths
 
@@ -40,7 +41,7 @@ def _require_afl_fuzz() -> None:
     "--timeout",
     type=click.FloatRange(min=0),
     default=None,
-    help="Stop the campaign after this many seconds.",
+    help="Stop after this many seconds of fuzzing (startup and paused time do not count).",
 )
 @click.option(
     "--no-sleep",
@@ -105,19 +106,32 @@ async def _run_campaign_with_signals(
     dry_run: bool = False,
     no_sleep: bool = False,
 ) -> None:
-    loop = asyncio.get_running_loop()
-    if not dry_run:
-        _require_afl_fuzz()
-        await asyncio.to_thread(configure_host, config.host)
-        tmp_root = resolved.afl_tmpdir
-        if fresh:
-            await asyncio.to_thread(reset_output_directory, resolved.out_dir)
-        else:
-            resolved.out_dir.mkdir(parents=True, exist_ok=True)
-    else:
+    with ExitStack() as host_scope:
         tmp_root = None
+        if not dry_run:
+            _require_afl_fuzz()
+            host_scope.enter_context(configured_host(config.host))
+            tmp_root = resolved.afl_tmpdir
+            if fresh:
+                await asyncio.to_thread(reset_output_directory, resolved.out_dir)
+            else:
+                resolved.out_dir.mkdir(parents=True, exist_ok=True)
+        await _run_fuzzers(config, resolved, fresh, timeout, dry_run, no_sleep, tmp_root)
 
+
+async def _run_fuzzers(
+    config: Config,
+    resolved: ResolvedPaths,
+    fresh: bool,
+    timeout: float | None,
+    dry_run: bool,
+    no_sleep: bool,
+    tmp_root: Path | None,
+) -> None:
+    loop = asyncio.get_running_loop()
     environment = build_environment(config)
+    if not fresh:
+        environment.setdefault("AFL_AUTORESUME", "1")
     append_logs = not fresh
     async with FuzzerGroup(dry_run=dry_run) as group:
         if not no_sleep:
@@ -127,36 +141,36 @@ async def _run_campaign_with_signals(
             main_name, main_command = specs[0]
             launch_started = time.time()
             main = await group.launch(
-                main_command,
-                main_name,
-                resolved.log_dir,
-                environment,
-                tmp_root,
-                append_logs,
+                main_command, main_name, resolved.log_dir, environment, tmp_root, append_logs
             )
-            await group.wait_for_main(
-                resolved.out_dir / MAIN_NAME / "fuzzer_stats",
-                main,
-                wait_for_main,
-                launch_started,
-            )
+            await _wait_until_ready(group, resolved, (main,), launch_started)
 
-            async def run_campaign() -> None:
-                for name, command in specs[1:]:
+            launch_started = time.time()
+            helpers = []
+            for name, command in specs[1:]:
+                helpers.append(
                     await group.launch(
                         command, name, resolved.log_dir, environment, tmp_root, append_logs
                     )
-
-                LOGGER.info("Monitor: afl-whatsup %s", resolved.out_dir)
-                LOGGER.info("Stop: press Ctrl-C")
-                LOGGER.info("Pause: press Ctrl-Z (sleep fuzzers)")
-                LOGGER.info("Emergency stop: pkill afl-fuzz")
-                await group.abort_if_any_died()
-
-            if timeout is None:
-                await run_campaign()
-            else:
-                await asyncio.wait_for(run_campaign(), timeout=timeout)
+                )
+            LOGGER.info("Monitor: afl-whatsup %s", resolved.out_dir)
+            LOGGER.info("Stop: press Ctrl-C")
+            LOGGER.info("Pause: press Ctrl-Z (sleep fuzzers)")
+            LOGGER.info("Emergency stop: pkill afl-fuzz")
+            await _wait_until_ready(group, resolved, helpers, launch_started)
+            await group.wait_for_completion(timeout)
+            LOGGER.info("all fuzzers finished")
         finally:
             if not no_sleep:
                 loop.remove_signal_handler(signal.SIGTSTP)
+
+
+async def _wait_until_ready(
+    group: FuzzerGroup,
+    resolved: ResolvedPaths,
+    fuzzers: Iterable[FuzzerProcess],
+    launched_since: float,
+) -> None:
+    for fuzzer in fuzzers:
+        stats_path = resolved.out_dir / fuzzer.name / "fuzzer_stats"
+        await group.wait_until_ready(stats_path, fuzzer, wait_for_stats, launched_since)

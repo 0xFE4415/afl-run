@@ -73,17 +73,17 @@ def test_run_campaign_launches_main_cmplog_and_workers(tmp_path: Path, caplog) -
 
     with (
         patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
-        patch("afl_run.cli.configure_host") as configure,
+        patch("afl_run.cli.configured_host") as configure,
         patch("afl_run.cli.reset_output_directory") as prepare,
         patch("afl_run.cli.build_environment", return_value={"PATH": "/bin"}),
         patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
         patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()) as to_thread,
-        patch("afl_run.cli.FuzzerGroup.abort_if_any_died", new=AsyncMock()),
+        patch("afl_run.cli.FuzzerGroup.wait_for_completion", new=AsyncMock()),
         patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
     ):
         asyncio.run(_run_campaign(cfg, paths, fresh=True))
 
-    to_thread.assert_any_await(configure, cfg.host)
+    configure.assert_called_once_with(cfg.host)
     to_thread.assert_any_await(prepare, paths.out_dir)
     assert launched == ["main", "cmplog", "w1", "w2", "w3", "laf", "asan1", "asan2"]
     assert f"Monitor: afl-whatsup {paths.out_dir}" in caplog.text
@@ -100,12 +100,12 @@ def test_run_campaign_without_optional_workers_uses_existing_output(tmp_path: Pa
 
     with (
         patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
-        patch("afl_run.cli.configure_host"),
+        patch("afl_run.cli.configured_host"),
         patch("afl_run.cli.reset_output_directory") as prepare,
         patch("afl_run.cli.build_environment", return_value={}),
         patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
         patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()),
-        patch("afl_run.cli.FuzzerGroup.abort_if_any_died", new=AsyncMock()),
+        patch("afl_run.cli.FuzzerGroup.wait_for_completion", new=AsyncMock()),
         patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
     ):
         asyncio.run(_run_campaign(cfg, paths))
@@ -147,7 +147,7 @@ def test_run_campaign_end_to_end_with_stub_afl_fuzz(tmp_path: Path, monkeypatch)
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
 
     async def run() -> None:
-        with patch("afl_run.cli.configure_host"):
+        with patch("afl_run.cli.configured_host"):
             with pytest.raises(TimeoutError):
                 await _run_campaign(cfg, paths, timeout=0.2, fresh=True)
 
@@ -161,12 +161,12 @@ def test_run_campaign_terminates_started_fuzzers_on_failure(tmp_path: Path) -> N
 
     with (
         patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
-        patch("afl_run.cli.configure_host"),
+        patch("afl_run.cli.configured_host"),
         patch("afl_run.cli.build_environment", return_value={}),
         patch("afl_run.cli.FuzzerGroup.launch", new=AsyncMock(return_value=main)),
         patch(
             "afl_run.cli.asyncio.to_thread",
-            new=AsyncMock(side_effect=[None, RuntimeError("main failed")]),
+            new=AsyncMock(side_effect=[RuntimeError("main failed")]),
         ),
         patch(
             "afl_run.cli.FuzzerGroup.__aexit__",
@@ -184,7 +184,7 @@ def test_run_campaign_does_not_cleanup_if_host_setup_fails(tmp_path: Path) -> No
 
     with (
         patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
-        patch("afl_run.cli.configure_host", side_effect=OSError("host failed")),
+        patch("afl_run.cli.configured_host", side_effect=OSError("host failed")),
         patch(
             "afl_run.cli.FuzzerGroup.__aexit__",
             new=AsyncMock(return_value=False),
@@ -201,7 +201,7 @@ def test_run_campaign_cleans_up_before_process_start(tmp_path: Path) -> None:
 
     with (
         patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
-        patch("afl_run.cli.configure_host"),
+        patch("afl_run.cli.configured_host"),
         patch("afl_run.cli.build_environment", return_value={}),
         patch(
             "afl_run.orchestration.build_main_command",
@@ -310,7 +310,7 @@ def test_run_campaign_requires_afl_fuzz_before_any_setup(tmp_path: Path) -> None
 
     with (
         patch("afl_run.cli.shutil.which", return_value=None),
-        patch("afl_run.cli.configure_host") as configure,
+        patch("afl_run.cli.configured_host") as configure,
         patch("afl_run.cli.reset_output_directory") as prepare,
         patch("afl_run.cli.FuzzerGroup") as group_cls,
     ):
@@ -328,7 +328,7 @@ def test_run_campaign_dry_run_skips_afl_fuzz_check(tmp_path: Path, caplog) -> No
 
     with (
         patch("afl_run.cli.shutil.which", return_value=None),
-        patch("afl_run.cli.configure_host") as configure,
+        patch("afl_run.cli.configured_host") as configure,
     ):
         asyncio.run(_run_campaign(cfg, paths, dry_run=True))
 
@@ -364,7 +364,7 @@ def _run_with_signals(cfg, paths, no_sleep: bool, loop: MagicMock) -> None:
     with (
         patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
         patch("afl_run.cli.asyncio.get_running_loop", return_value=loop),
-        patch("afl_run.cli.configure_host"),
+        patch("afl_run.cli.configured_host"),
         patch("afl_run.cli.build_environment", return_value={}),
         patch(
             "afl_run.cli.build_campaign_specs",
@@ -374,13 +374,13 @@ def _run_with_signals(cfg, paths, no_sleep: bool, loop: MagicMock) -> None:
     ):
         group = group_cls.return_value.__aenter__.return_value
         group.launch = AsyncMock(return_value=mock_fuzzer("main"))
-        group.wait_for_main = AsyncMock()
-        group.abort_if_any_died = AsyncMock()
+        group.wait_until_ready = AsyncMock()
+        group.wait_for_completion = AsyncMock()
         group_cls.return_value.__aexit__.return_value = False
         asyncio.run(_run_campaign_with_signals(cfg, paths, False, no_sleep=no_sleep))
         group.launch.assert_awaited_once()
-        group.wait_for_main.assert_awaited_once()
-        group.abort_if_any_died.assert_awaited_once()
+        group.wait_until_ready.assert_awaited_once()
+        group.wait_for_completion.assert_awaited_once()
 
 
 def test_run_campaign_with_signals_registers_sleep_when_enabled(tmp_path: Path) -> None:
@@ -405,3 +405,81 @@ def test_run_campaign_with_signals_skips_sleep_when_disabled(tmp_path: Path) -> 
     assert not any(
         call.args[0] == signal.SIGTSTP for call in loop.remove_signal_handler.call_args_list
     )
+
+
+def _run_recording_environment(tmp_path: Path, fresh: bool, base: dict[str, str]) -> dict[str, str]:
+    cfg, paths = _config(tmp_path, cmplog=False)
+    seen: list[dict[str, str]] = []
+
+    async def launch(command, name, log_dir, environment, *args):
+        seen.append(dict(environment))
+        return mock_fuzzer(name)
+
+    with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
+        patch("afl_run.cli.configured_host"),
+        patch("afl_run.cli.reset_output_directory"),
+        patch("afl_run.cli.asyncio.to_thread", new=AsyncMock()),
+        patch("afl_run.cli.build_environment", return_value=dict(base)),
+        patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
+        patch("afl_run.cli.FuzzerGroup.wait_for_completion", new=AsyncMock()),
+        patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
+    ):
+        asyncio.run(_run_campaign(cfg, paths, fresh=fresh))
+    return seen[0]
+
+
+def test_run_campaign_enables_autoresume_without_fresh(tmp_path: Path) -> None:
+    assert _run_recording_environment(tmp_path, False, {})["AFL_AUTORESUME"] == "1"
+
+
+def test_run_campaign_does_not_set_autoresume_with_fresh(tmp_path: Path) -> None:
+    assert "AFL_AUTORESUME" not in _run_recording_environment(tmp_path, True, {})
+
+
+def test_run_campaign_keeps_user_autoresume_value(tmp_path: Path) -> None:
+    environment = _run_recording_environment(tmp_path, False, {"AFL_AUTORESUME": "0"})
+
+    assert environment["AFL_AUTORESUME"] == "0"
+
+
+def test_run_campaign_waits_for_every_instance_stats_before_timing(tmp_path: Path) -> None:
+    cfg, paths = _config(tmp_path, n_workers=2)
+    launched, launch = _make_launch_recorder()
+    order: list[str] = []
+
+    async def wait_until_ready(self, stats_path, fuzzer, waiter, since):
+        order.append(f"ready:{stats_path.parent.name}")
+
+    async def wait_for_completion(self, fuzzing_seconds=None):
+        order.append(f"run:{fuzzing_seconds}")
+
+    with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
+        patch("afl_run.cli.configured_host"),
+        patch("afl_run.cli.build_environment", return_value={}),
+        patch("afl_run.cli.FuzzerGroup.launch", side_effect=launch),
+        patch("afl_run.cli.FuzzerGroup.wait_until_ready", new=wait_until_ready),
+        patch("afl_run.cli.FuzzerGroup.wait_for_completion", new=wait_for_completion),
+        patch("afl_run.cli.FuzzerGroup.__aexit__", new=AsyncMock(return_value=False)),
+    ):
+        asyncio.run(_run_campaign(cfg, paths, timeout=7.5))
+
+    assert launched == ["main", "cmplog", "w1", "w2"]
+    assert order == ["ready:main", "ready:cmplog", "ready:w1", "ready:w2", "run:7.5"]
+
+
+def test_run_campaign_restores_host_after_failure(tmp_path: Path) -> None:
+    cfg, paths = _config(tmp_path)
+
+    with (
+        patch("afl_run.cli.shutil.which", return_value="/usr/bin/afl-fuzz"),
+        patch("afl_run.cli.configured_host") as host,
+        patch("afl_run.cli.build_environment", return_value={}),
+        patch("afl_run.cli.FuzzerGroup.launch", side_effect=OSError("launch failed")),
+        pytest.raises(OSError, match="launch failed"),
+    ):
+        asyncio.run(_run_campaign(cfg, paths))
+
+    host.return_value.__enter__.assert_called_once_with()
+    host.return_value.__exit__.assert_called_once()

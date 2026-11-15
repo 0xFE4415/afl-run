@@ -358,3 +358,45 @@ def test_readme_config_example_matches_model() -> None:
     config = Config.model_validate_json(example)
     assert config.execution.n_workers == 4
     assert config.paths.main == "build-afl/afl_harness"
+
+
+def test_missing_paths_error_names_paths() -> None:
+    with pytest.raises(ValidationError, match="paths"):
+        Config.model_validate({})
+
+
+@pytest.mark.parametrize("timeout_ms", [0, 4])
+def test_timeout_below_afl_minimum_is_rejected(timeout_ms: int) -> None:
+    with pytest.raises(ValidationError, match="timeout_ms"):
+        EngineConfig(timeout_ms=timeout_ms)
+
+
+@pytest.mark.parametrize(
+    "field", ["memory_limit_mb", "memory_limit_cmplog_mb", "memory_limit_asan_mb"]
+)
+@pytest.mark.parametrize("value", [1, 4])
+def test_memory_limit_below_afl_minimum_is_rejected(field: str, value: int) -> None:
+    with pytest.raises(ValidationError, match="memory limit"):
+        EngineConfig.model_validate({field: value})
+
+
+@pytest.mark.parametrize("value", [0, 5])
+def test_memory_limit_zero_and_minimum_are_accepted(value: int) -> None:
+    assert EngineConfig(memory_limit_mb=value).memory_limit_mb == value
+
+
+def test_asan_timeout_below_afl_minimum_is_rejected_with_asan_harness() -> None:
+    with pytest.raises(ValidationError, match="asan_timeout_scale"):
+        Config(
+            paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out", asan="asan"),
+            engine=EngineConfig(timeout_ms=100, asan_timeout_scale=0.0),
+        )
+
+
+def test_asan_timeout_below_afl_minimum_is_accepted_without_asan_harness() -> None:
+    config = Config(
+        paths=PathConfig(main="main", seeds_dir="seeds", out_dir="out"),
+        engine=EngineConfig(timeout_ms=100, asan_timeout_scale=0.0),
+    )
+
+    assert config.engine.asan_timeout_scale == 0.0

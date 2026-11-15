@@ -20,7 +20,7 @@ from afl_run.orchestration import (
     build_main_command,
     build_worker_specs,
     reset_output_directory,
-    wait_for_main,
+    wait_for_stats,
 )
 
 
@@ -318,7 +318,7 @@ class _Process:
     pid = 123
 
 
-def test_wait_for_main_waits_until_stats_exists(tmp_path: Path) -> None:
+def test_wait_for_stats_waits_until_stats_exists(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     notifier = _Notifier(stats)
     selector = _Selector(["filesystem", "filesystem"])
@@ -329,23 +329,23 @@ def test_wait_for_main_waits_until_stats_exists(tmp_path: Path) -> None:
         patch("afl_run.orchestration.os.pidfd_open", return_value=42),
         patch("afl_run.orchestration.os.close"),
     ):
-        wait_for_main(stats, _Process(), time.time())
+        wait_for_stats(stats, _Process(), time.time())
 
     assert stats.is_file()
 
 
-def test_wait_for_main_returns_if_stats_already_exists(tmp_path: Path) -> None:
+def test_wait_for_stats_returns_if_stats_already_exists(tmp_path: Path) -> None:
     stats = tmp_path / "fuzzer_stats"
     stats.write_text("")
     since = time.time() - 1
 
     with patch("afl_run.orchestration.INotify") as notifier:
-        wait_for_main(stats, _Process(), since)
+        wait_for_stats(stats, _Process(), since)
 
     notifier.assert_not_called()
 
 
-def test_wait_for_main_rechecks_after_installing_watch(tmp_path: Path) -> None:
+def test_wait_for_stats_rechecks_after_installing_watch(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
     notifier = _Notifier(stats, create_on_watch=True)
@@ -354,13 +354,13 @@ def test_wait_for_main_rechecks_after_installing_watch(tmp_path: Path) -> None:
         patch("afl_run.orchestration.INotify", return_value=notifier),
         patch("afl_run.orchestration.os.pidfd_open") as pidfd_open,
     ):
-        wait_for_main(stats, _Process(), time.time())
+        wait_for_stats(stats, _Process(), time.time())
 
     pidfd_open.assert_not_called()
 
 
 @pytest.mark.parametrize("stats_exists", [True, False])
-def test_wait_for_main_handles_reaped_main(tmp_path: Path, stats_exists: bool) -> None:
+def test_wait_for_stats_handles_reaped_main(tmp_path: Path, stats_exists: bool) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
 
@@ -375,26 +375,26 @@ def test_wait_for_main_handles_reaped_main(tmp_path: Path, stats_exists: bool) -
     ):
         since = time.time() - 1
         if stats_exists:
-            wait_for_main(stats, _Process(), since)
+            wait_for_stats(stats, _Process(), since)
         else:
-            with pytest.raises(RuntimeError, match="main exited before creating"):
-                wait_for_main(stats, _Process(), since)
+            with pytest.raises(RuntimeError, match="fuzzer exited before creating"):
+                wait_for_stats(stats, _Process(), since)
 
 
-def test_wait_for_main_creates_missing_main_directory(tmp_path: Path) -> None:
+def test_wait_for_stats_creates_missing_main_directory(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     script = "import sys, time; time.sleep(0.1); open(sys.argv[1], 'w').close()"
     process = subprocess.Popen([sys.executable, "-c", script, str(stats)])
 
     try:
-        wait_for_main(stats, process, time.time())
+        wait_for_stats(stats, process, time.time())
     finally:
         process.wait(timeout=5)
 
     assert stats.is_file()
 
 
-def test_wait_for_main_raises_if_process_exits(tmp_path: Path) -> None:
+def test_wait_for_stats_raises_if_process_exits(tmp_path: Path) -> None:
     selector = _Selector(["process"])
     with (
         patch("afl_run.orchestration.INotify"),
@@ -403,10 +403,10 @@ def test_wait_for_main_raises_if_process_exits(tmp_path: Path) -> None:
         patch("afl_run.orchestration.os.close"),
     ):
         with pytest.raises(RuntimeError):
-            wait_for_main(tmp_path / "fuzzer_stats", _Process(), time.time())
+            wait_for_stats(tmp_path / "fuzzer_stats", _Process(), time.time())
 
 
-def test_wait_for_main_accepts_stats_created_with_process_event(tmp_path: Path) -> None:
+def test_wait_for_stats_accepts_stats_created_with_process_event(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
 
@@ -421,10 +421,10 @@ def test_wait_for_main_accepts_stats_created_with_process_event(tmp_path: Path) 
         patch("afl_run.orchestration.os.pidfd_open", return_value=42),
         patch("afl_run.orchestration.os.close"),
     ):
-        wait_for_main(stats, _Process(), time.time())
+        wait_for_stats(stats, _Process(), time.time())
 
 
-def test_wait_for_main_rejects_stale_stats_from_previous_run(tmp_path: Path) -> None:
+def test_wait_for_stats_rejects_stale_stats_from_previous_run(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
     stats.write_text("")
@@ -438,11 +438,11 @@ def test_wait_for_main_rejects_stale_stats_from_previous_run(tmp_path: Path) -> 
         patch("afl_run.orchestration.os.pidfd_open", return_value=42),
         patch("afl_run.orchestration.os.close"),
     ):
-        with pytest.raises(RuntimeError, match="main exited"):
-            wait_for_main(stats, _Process(), time.time())
+        with pytest.raises(RuntimeError, match="fuzzer exited"):
+            wait_for_stats(stats, _Process(), time.time())
 
 
-def test_wait_for_main_accepts_stats_refreshed_after_launch(tmp_path: Path) -> None:
+def test_wait_for_stats_accepts_stats_refreshed_after_launch(tmp_path: Path) -> None:
     stats = tmp_path / "main" / "fuzzer_stats"
     stats.parent.mkdir()
     stats.write_text("")
@@ -457,6 +457,79 @@ def test_wait_for_main_accepts_stats_refreshed_after_launch(tmp_path: Path) -> N
         patch("afl_run.orchestration.os.pidfd_open", return_value=42),
         patch("afl_run.orchestration.os.close"),
     ):
-        wait_for_main(stats, _Process(), time.time())
+        wait_for_stats(stats, _Process(), time.time())
 
     assert stats.stat().st_mtime > stale
+
+
+def _raise_main_startup_error(stats: Path, log_path: Path | None) -> RuntimeError:
+    selector = _Selector(["process"])
+    with (
+        patch("afl_run.orchestration.INotify"),
+        patch("afl_run.orchestration.selectors.DefaultSelector", return_value=selector),
+        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
+        patch("afl_run.orchestration.os.close"),
+        pytest.raises(RuntimeError) as error,
+    ):
+        wait_for_stats(stats, _Process(), time.time(), log_path)
+    return error.value
+
+
+def test_wait_for_stats_error_points_at_instance_log(tmp_path: Path) -> None:
+    stats = tmp_path / "out" / "main" / "fuzzer_stats"
+    log_path = tmp_path / "logs" / "main.log"
+    log_path.parent.mkdir()
+    log_path.write_text(
+        "afl-fuzz++4.36a based on afl by Michal Zalewski\n"
+        "[*] Checking core_pattern...\n"
+        "PROGRAM ABORT : Pipe at the beginning of 'core_pattern'\n"
+    )
+
+    message = str(_raise_main_startup_error(stats, log_path))
+
+    assert f"fuzzer exited before creating {stats}; see log {log_path}" in message
+    assert f"--- tail of {log_path} ---" in message
+    assert "PROGRAM ABORT : Pipe at the beginning of 'core_pattern'" in message
+
+
+def test_wait_for_stats_error_limits_tail_to_last_lines(tmp_path: Path) -> None:
+    stats = tmp_path / "fuzzer_stats"
+    log_path = tmp_path / "main.log"
+    log_path.write_text("".join(f"line {index}\n" for index in range(100)))
+
+    message = str(_raise_main_startup_error(stats, log_path))
+
+    assert "line 74" not in message
+    assert "line 75" in message
+    assert "line 99" in message
+
+
+def test_wait_for_stats_error_names_missing_log_without_tail(tmp_path: Path) -> None:
+    stats = tmp_path / "fuzzer_stats"
+    log_path = tmp_path / "logs" / "main.log"
+
+    message = str(_raise_main_startup_error(stats, log_path))
+
+    assert f"see log {log_path}" in message
+    assert "--- tail of" not in message
+
+
+def test_wait_for_stats_error_tails_only_output_after_start_offset(tmp_path: Path) -> None:
+    stats = tmp_path / "fuzzer_stats"
+    log_path = tmp_path / "main.log"
+    previous = "PROGRAM ABORT : previous run\n"
+    log_path.write_text(previous + "this run\n")
+
+    with (
+        patch("afl_run.orchestration.INotify"),
+        patch(
+            "afl_run.orchestration.selectors.DefaultSelector", return_value=_Selector(["process"])
+        ),
+        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
+        patch("afl_run.orchestration.os.close"),
+        pytest.raises(RuntimeError) as error,
+    ):
+        wait_for_stats(stats, _Process(), time.time(), log_path, len(previous))
+
+    assert "this run" in str(error.value)
+    assert "previous run" not in str(error.value)

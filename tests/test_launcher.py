@@ -5,6 +5,7 @@ import logging
 import signal
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
@@ -12,21 +13,27 @@ import pytest
 from helpers import mock_process
 
 from afl_run.launcher import (
+    LOG_TAIL_LINES,
+    LOG_TAIL_MAX_BYTES,
     STARTUP_WARNING_SECONDS,
     FuzzerGroup,
     FuzzerProcess,
     ProcessLike,
-    _abort_if_any_died,
     _format_size,
     _has_liveness_progressed,
     _LivenessSample,
     _log_liveness,
-    _monitor_main_startup,
+    _monitor_startup,
+    _read_wait_channel,
     _sample_liveness,
     _signal_process_group,
+    _terminate_fuzzers,
+    _wait_for_completion,
     _warn_if_startup_is_slow,
+    format_log_tail,
     handle_sleep_signal,
     launch_fuzzer,
+    read_log_tail,
 )
 
 
@@ -222,50 +229,56 @@ def test_fuzzer_group_reports_dead_process() -> None:
     async def run() -> None:
         async with FuzzerGroup((fuzzer,)) as group:
             with pytest.raises(RuntimeError, match=r"main.*main\.log"):
-                await group.abort_if_any_died()
+                await group.wait_for_completion()
 
     asyncio.run(run())
     process.wait.assert_awaited()
     log.close.assert_called_once_with()
 
 
-def test_abort_if_any_died_reports_all_dead_processes() -> None:
+def test_wait_for_completion_reports_all_dead_processes() -> None:
     first = FuzzerProcess("first", mock_process(returncode=1), Path("first.log"), MagicMock())
     second = FuzzerProcess("second", mock_process(returncode=2), Path("second.log"), MagicMock())
 
     async def run() -> None:
         with pytest.raises(RuntimeError) as error:
-            await _abort_if_any_died((first, second))
+            await _wait_for_completion((first, second))
         assert "first" in str(error.value)
         assert "second" in str(error.value)
 
     asyncio.run(run())
 
 
-def test_abort_if_any_died_reports_wait_errors() -> None:
+def test_wait_for_completion_reports_wait_errors() -> None:
     process = _ErrorProcess()
     fuzzer = FuzzerProcess("broken", process, Path("broken.log"), MagicMock())
 
     async def run() -> None:
         with pytest.raises(RuntimeError, match="wait failed"):
-            await _abort_if_any_died((fuzzer,))
+            await _wait_for_completion((fuzzer,))
 
     asyncio.run(run())
 
 
-def test_abort_if_any_died_accepts_empty_group() -> None:
-    asyncio.run(_abort_if_any_died(()))
+def test_wait_for_completion_accepts_empty_group() -> None:
+    asyncio.run(_wait_for_completion(()))
 
 
 def _launch_probe() -> subprocess.Popen[bytes]:
     return subprocess.Popen(["python3", "-c", "while True: pass"], close_fds=True)
 
 
-def test_wait_for_main_warns_when_startup_is_slow(caplog) -> None:
+def test_wait_until_ready_warns_when_startup_is_slow(caplog) -> None:
     caplog.set_level(logging.WARNING, logger="afl_run.launcher")
     fuzzer = FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock())
 
-    def slow_waiter(stats_path: Path, main: ProcessLike, since: float) -> None:
+    def slow_waiter(
+        stats_path: Path,
+        main: ProcessLike,
+        since: float,
+        log_path: Path | None,
+        log_start_offset: int,
+    ) -> None:
         time.sleep(0.2)
 
     async def run() -> None:
@@ -274,20 +287,20 @@ def test_wait_for_main_warns_when_startup_is_slow(caplog) -> None:
             patch("afl_run.launcher.STARTUP_WARNING_SECONDS", 0.05),
             patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.01),
         ):
-            await group.wait_for_main(Path("stats"), fuzzer, slow_waiter, 0.0)
+            await group.wait_until_ready(Path("stats"), fuzzer, slow_waiter, 0.0)
 
     asyncio.run(run())
 
-    assert "main instance startup is slow" in caplog.text
+    assert "fuzzer instance startup is slow" in caplog.text
 
 
-def test_wait_for_main_does_not_warn_on_fast_startup(caplog) -> None:
+def test_wait_until_ready_does_not_warn_on_fast_startup(caplog) -> None:
     caplog.set_level(logging.WARNING, logger="afl_run.launcher")
     waiter = MagicMock()
 
     async def run() -> None:
         group = FuzzerGroup()
-        await group.wait_for_main(
+        await group.wait_until_ready(
             Path("stats"),
             FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock()),
             waiter,
@@ -297,7 +310,7 @@ def test_wait_for_main_does_not_warn_on_fast_startup(caplog) -> None:
     asyncio.run(run())
 
     waiter.assert_called_once()
-    assert "main instance startup is slow" not in caplog.text
+    assert "fuzzer instance startup is slow" not in caplog.text
 
 
 def test_warn_if_startup_is_slow_warns_once(caplog) -> None:
@@ -306,7 +319,7 @@ def test_warn_if_startup_is_slow_warns_once(caplog) -> None:
     assert _warn_if_startup_is_slow(STARTUP_WARNING_SECONDS, False) is True
     assert _warn_if_startup_is_slow(STARTUP_WARNING_SECONDS, True) is True
 
-    assert caplog.text.count("main instance startup is slow") == 1
+    assert caplog.text.count("fuzzer instance startup is slow") == 1
 
 
 def test_warn_if_startup_is_slow_keeps_false_before_threshold() -> None:
@@ -342,13 +355,19 @@ def test_has_liveness_progressed(previous, current, expected) -> None:
     assert _has_liveness_progressed(previous, current) is expected
 
 
-def test_wait_for_main_propagates_waiter_error() -> None:
-    def failing_waiter(stats_path: Path, main: ProcessLike, since: float) -> None:
+def test_wait_until_ready_propagates_waiter_error() -> None:
+    def failing_waiter(
+        stats_path: Path,
+        main: ProcessLike,
+        since: float,
+        log_path: Path | None,
+        log_start_offset: int,
+    ) -> None:
         raise RuntimeError("main exited")
 
     async def run() -> None:
         group = FuzzerGroup()
-        await group.wait_for_main(
+        await group.wait_until_ready(
             Path("stats"),
             FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock()),
             failing_waiter,
@@ -359,17 +378,23 @@ def test_wait_for_main_propagates_waiter_error() -> None:
         asyncio.run(run())
 
 
-def test_wait_for_main_propagates_stuck_watchdog_error() -> None:
-    async def stuck_monitor(pid: int, log_path: Path) -> None:
-        raise RuntimeError("main instance appears stuck")
+def test_wait_until_ready_propagates_stuck_watchdog_error() -> None:
+    async def stuck_monitor(pid: int, log_path: Path, is_sleeping: Callable[[], bool]) -> None:
+        raise RuntimeError("fuzzer instance appears stuck")
 
-    def slow_waiter(stats_path: Path, main: ProcessLike, since: float) -> None:
+    def slow_waiter(
+        stats_path: Path,
+        main: ProcessLike,
+        since: float,
+        log_path: Path | None,
+        log_start_offset: int,
+    ) -> None:
         time.sleep(1)
 
     async def run() -> None:
         group = FuzzerGroup()
-        with patch("afl_run.launcher._monitor_main_startup", new=stuck_monitor):
-            await group.wait_for_main(
+        with patch("afl_run.launcher._monitor_startup", new=stuck_monitor):
+            await group.wait_until_ready(
                 Path("stats"),
                 FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock()),
                 slow_waiter,
@@ -390,7 +415,7 @@ def test_monitor_flags_stuck_main(tmp_path: Path) -> None:
             patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.02),
             patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 0.1),
         ):
-            await asyncio.wait_for(_monitor_main_startup(child.pid, log_path), timeout=5)
+            await asyncio.wait_for(_monitor_startup(child.pid, log_path, lambda: False), timeout=5)
 
     try:
         with pytest.raises(RuntimeError, match="appears stuck"):
@@ -410,7 +435,9 @@ def test_monitor_allows_progressing_main(tmp_path: Path) -> None:
             patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.02),
             patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 0.15),
         ):
-            await asyncio.wait_for(_monitor_main_startup(child.pid, log_path), timeout=0.4)
+            await asyncio.wait_for(
+                _monitor_startup(child.pid, log_path, lambda: False), timeout=0.4
+            )
 
     try:
         with pytest.raises(TimeoutError):
@@ -432,7 +459,9 @@ def test_monitor_logs_liveness(tmp_path: Path, caplog) -> None:
             patch("afl_run.launcher.LIVENESS_LOG_SECONDS", 0.05),
             patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 999),
         ):
-            await asyncio.wait_for(_monitor_main_startup(child.pid, log_path), timeout=0.3)
+            await asyncio.wait_for(
+                _monitor_startup(child.pid, log_path, lambda: False), timeout=0.3
+            )
 
     try:
         with pytest.raises(TimeoutError):
@@ -453,7 +482,7 @@ def test_monitor_tolerates_unreadable_proc(tmp_path: Path) -> None:
             patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.01),
             patch("afl_run.launcher.LIVENESS_LOG_SECONDS", 0.05),
         ):
-            await asyncio.wait_for(_monitor_main_startup(-1, log_path), timeout=0.2)
+            await asyncio.wait_for(_monitor_startup(-1, log_path, lambda: False), timeout=0.2)
 
     with pytest.raises(TimeoutError):
         asyncio.run(run())
@@ -469,7 +498,7 @@ def test_monitor_counts_log_growth_as_progress(tmp_path: Path) -> None:
             patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.05),
             patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 0.2),
         ):
-            monitor = asyncio.ensure_future(_monitor_main_startup(child.pid, log_path))
+            monitor = asyncio.ensure_future(_monitor_startup(child.pid, log_path, lambda: False))
             for _ in range(6):
                 await asyncio.sleep(0.05)
                 with log_path.open("ab") as log_file:
@@ -542,7 +571,7 @@ def test_fuzzer_group_cancels_other_waiters() -> None:
     async def run() -> None:
         async with FuzzerGroup((first, pending)) as group:
             with pytest.raises(RuntimeError):
-                await group.abort_if_any_died()
+                await group.wait_for_completion()
 
     asyncio.run(run())
 
@@ -631,3 +660,467 @@ def test_signal_process_group_signals_group_on_success() -> None:
         _signal_process_group(7, signal.SIGCONT)
 
     killpg.assert_called_once_with(7, signal.SIGCONT)
+
+
+def test_read_log_tail_returns_last_lines(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_text("first\nsecond\nthird\n")
+
+    assert read_log_tail(log_path) == "first\nsecond\nthird"
+
+
+def test_read_log_tail_limits_lines(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_text("".join(f"line {index}\n" for index in range(LOG_TAIL_LINES + 10)))
+
+    tail = read_log_tail(log_path)
+
+    assert tail is not None
+    assert tail.splitlines()[0] == f"line {10}"
+    assert len(tail.splitlines()) == LOG_TAIL_LINES
+
+
+def test_read_log_tail_missing_log_returns_none(tmp_path: Path) -> None:
+    assert read_log_tail(tmp_path / "missing.log") is None
+
+
+def test_read_log_tail_directory_returns_none(tmp_path: Path) -> None:
+    assert read_log_tail(tmp_path) is None
+
+
+def test_read_log_tail_empty_log_returns_none(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"")
+
+    assert read_log_tail(log_path) is None
+
+
+def test_read_log_tail_blank_log_returns_none(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"\n")
+
+    assert read_log_tail(log_path) is None
+
+
+def test_read_log_tail_caps_huge_log(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"x" * (LOG_TAIL_MAX_BYTES + 100) + b"\nPROGRAM ABORT : aborted\n")
+
+    assert read_log_tail(log_path) == "PROGRAM ABORT : aborted"
+
+
+def test_read_log_tail_strips_ansi_escapes(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"\x1b[1;91mPROGRAM ABORT\x1b[0m : Pipe at the beginning\n")
+
+    assert read_log_tail(log_path) == "PROGRAM ABORT : Pipe at the beginning"
+
+
+def test_format_log_tail_renders_tail_block(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_text("boom\n")
+
+    assert format_log_tail(log_path) == f"\n--- tail of {log_path} ---\nboom"
+
+
+def test_format_log_tail_skips_unreadable_log(tmp_path: Path) -> None:
+    assert format_log_tail(tmp_path / "missing.log") == ""
+
+
+def test_wait_for_completion_includes_log_tail(tmp_path: Path) -> None:
+    log_path = tmp_path / "w1.log"
+    log_path.write_text("afl-fuzz: target died\n")
+    fuzzer = FuzzerProcess("w1", mock_process(returncode=1), log_path, MagicMock())
+
+    async def run() -> RuntimeError:
+        with pytest.raises(RuntimeError) as error:
+            await _wait_for_completion((fuzzer,))
+        return error.value
+
+    error = asyncio.run(run())
+
+    message = str(error)
+    assert f"fuzzer w1 exited with code 1; see log {log_path}" in message
+    assert f"--- tail of {log_path} ---" in message
+    assert "afl-fuzz: target died" in message
+
+
+def test_read_log_tail_ignores_output_before_start_offset(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    previous = b"PROGRAM ABORT : previous run\n"
+    log_path.write_bytes(previous + b"this run\n")
+
+    assert read_log_tail(log_path, len(previous)) == "this run"
+
+
+def test_read_log_tail_returns_none_when_nothing_written_after_offset(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"previous run\n")
+
+    assert read_log_tail(log_path, log_path.stat().st_size) is None
+
+
+def test_read_log_tail_keeps_full_first_line_when_cap_lands_on_line_boundary(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "main.log"
+    window = b"a" * (LOG_TAIL_MAX_BYTES - 1) + b"\n"
+    log_path.write_bytes(b"older\n" + window)
+
+    assert read_log_tail(log_path) == "a" * (LOG_TAIL_MAX_BYTES - 1)
+
+
+def test_format_log_tail_honours_start_offset(tmp_path: Path) -> None:
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"old\nnew\n")
+
+    assert format_log_tail(log_path, 4) == f"\n--- tail of {log_path} ---\nnew"
+
+
+def test_launch_fuzzer_records_log_size_when_appending(tmp_path: Path) -> None:
+    (tmp_path / "main.log").write_bytes(b"previous output\n")
+
+    async def run() -> FuzzerProcess:
+        with patch(
+            "afl_run.launcher.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=mock_process()),
+        ):
+            return await launch_fuzzer(("afl-fuzz",), "main", tmp_path, {}, append=True)
+
+    result = asyncio.run(run())
+    result.log_file.close()
+
+    assert result.log_start_offset == len(b"previous output\n")
+
+
+def test_launch_fuzzer_starts_log_offset_at_zero_when_truncating(tmp_path: Path) -> None:
+    (tmp_path / "main.log").write_bytes(b"previous output\n")
+
+    async def run() -> FuzzerProcess:
+        with patch(
+            "afl_run.launcher.asyncio.create_subprocess_exec",
+            new=AsyncMock(return_value=mock_process()),
+        ):
+            return await launch_fuzzer(("afl-fuzz",), "main", tmp_path, {})
+
+    result = asyncio.run(run())
+    result.log_file.close()
+
+    assert result.log_start_offset == 0
+
+
+def test_wait_for_completion_ignores_previous_run_output(tmp_path: Path) -> None:
+    log_path = tmp_path / "w1.log"
+    log_path.write_bytes(b"failure from the PREVIOUS run\nthis run\n")
+    offset = len(b"failure from the PREVIOUS run\n")
+    fuzzer = FuzzerProcess("w1", mock_process(returncode=-9), log_path, MagicMock(), offset)
+
+    async def run() -> RuntimeError:
+        with pytest.raises(RuntimeError) as error:
+            await _wait_for_completion((fuzzer,))
+        return error.value
+
+    message = str(asyncio.run(run()))
+
+    assert "this run" in message
+    assert "PREVIOUS" not in message
+
+
+def test_wait_until_ready_passes_log_start_offset_to_waiter() -> None:
+    waiter = MagicMock()
+    main = FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock(), 17)
+
+    async def run() -> None:
+        await FuzzerGroup().wait_until_ready(Path("stats"), main, waiter, 1.5)
+
+    asyncio.run(run())
+
+    waiter.assert_called_once_with(Path("stats"), main.process, 1.5, Path("main.log"), 17)
+
+
+def test_monitor_does_not_flag_sleeping_main(tmp_path: Path) -> None:
+    child = subprocess.Popen(["sleep", "30"])
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"")
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.02),
+            patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 0.1),
+        ):
+            await asyncio.wait_for(_monitor_startup(child.pid, log_path, lambda: True), timeout=0.4)
+
+    try:
+        with pytest.raises(TimeoutError):
+            asyncio.run(run())
+    finally:
+        child.terminate()
+        child.wait()
+
+
+def test_group_monitor_sees_sleep_state() -> None:
+    seen: list[bool] = []
+    group = FuzzerGroup(dry_run=False)
+
+    async def spy_monitor(pid: int, log_path: Path, is_sleeping: Callable[[], bool]) -> None:
+        seen.append(is_sleeping())
+        group.toggle_sleep()
+        seen.append(is_sleeping())
+        group.toggle_sleep()
+        seen.append(is_sleeping())
+        raise RuntimeError("stop")
+
+    def slow_waiter(*args: object) -> None:
+        time.sleep(0.5)
+
+    async def run() -> None:
+        group.toggle_sleep()
+        with patch("afl_run.launcher._monitor_startup", new=spy_monitor):
+            await group.wait_until_ready(
+                Path("stats"),
+                FuzzerProcess("main", mock_process(), Path("main.log"), MagicMock()),
+                slow_waiter,
+                0.0,
+            )
+
+    with pytest.raises(RuntimeError, match="stop"):
+        asyncio.run(run())
+
+    assert seen == [True, False, True]
+
+
+def test_read_wait_channel_reports_unavailable_process() -> None:
+    assert _read_wait_channel(2**30) == "wait channel unavailable"
+
+
+def test_read_wait_channel_reports_channel_name() -> None:
+    with patch("pathlib.Path.read_text", return_value="do_epoll_wait\n"):
+        assert _read_wait_channel(1) == "wait channel do_epoll_wait"
+
+
+def test_read_wait_channel_reports_zero_for_empty_channel() -> None:
+    with patch("pathlib.Path.read_text", return_value=""):
+        assert _read_wait_channel(1) == "wait channel 0"
+
+
+@pytest.mark.parametrize("sleeping", [True, False])
+def test_monitor_logs_slow_startup_and_liveness_only_when_awake(
+    sleeping: bool, tmp_path: Path, caplog
+) -> None:
+    caplog.set_level(logging.INFO, logger="afl_run.launcher")
+    child = subprocess.Popen(["sleep", "30"])
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"")
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.02),
+            patch("afl_run.launcher.STARTUP_WARNING_SECONDS", 0),
+            patch("afl_run.launcher.LIVENESS_LOG_SECONDS", 0.01),
+        ):
+            await asyncio.wait_for(
+                _monitor_startup(child.pid, log_path, lambda: sleeping), timeout=0.2
+            )
+
+    try:
+        with pytest.raises(TimeoutError):
+            asyncio.run(run())
+    finally:
+        child.terminate()
+        child.wait()
+
+    assert ("startup is slow" in caplog.text) is not sleeping
+    assert ("still calibrating" in caplog.text) is not sleeping
+
+
+def test_stuck_message_reports_state_instead_of_stale_proc_path(tmp_path: Path) -> None:
+    child = subprocess.Popen(["sleep", "30"])
+    log_path = tmp_path / "main.log"
+    log_path.write_bytes(b"")
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.LIVENESS_PROBE_SECONDS", 0.02),
+            patch("afl_run.launcher.STARTUP_STUCK_SECONDS", 0.1),
+        ):
+            await asyncio.wait_for(_monitor_startup(child.pid, log_path, lambda: False), timeout=5)
+
+    try:
+        with pytest.raises(RuntimeError) as error:
+            asyncio.run(run())
+    finally:
+        child.terminate()
+        child.wait()
+
+    assert "wait channel" in str(error.value)
+    assert "/proc/" not in str(error.value)
+
+
+class _CancelledDuringShutdownProcess:
+    pid = 5
+
+    def __init__(self) -> None:
+        self.returncode: int | None = None
+        self.killed = False
+
+    def terminate(self) -> None:
+        return None
+
+    def kill(self) -> None:
+        self.killed = True
+        self.returncode = -9
+
+    async def wait(self) -> int:
+        while self.returncode is None:
+            await asyncio.sleep(0.01)
+        return self.returncode
+
+
+def test_cancellation_during_shutdown_kills_fuzzers_before_reraising() -> None:
+    process = _CancelledDuringShutdownProcess()
+    log = MagicMock()
+    fuzzer = FuzzerProcess("stubborn", process, Path("stubborn.log"), log)
+
+    async def run() -> None:
+        with (
+            patch("afl_run.launcher.os.killpg") as killpg,
+            patch("afl_run.launcher.os.getpgid", return_value=process.pid),
+        ):
+            task = asyncio.ensure_future(_terminate_fuzzers((fuzzer,)))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            killpg.assert_any_call(process.pid, signal.SIGKILL)
+
+    asyncio.run(run())
+
+    assert process.killed
+    log.close.assert_called_once_with()
+
+
+class _ControlledProcess:
+    def __init__(self, pid: int = 1) -> None:
+        self.pid = pid
+        self.returncode: int | None = None
+        self._finished = asyncio.Event()
+
+    def finish(self, returncode: int) -> None:
+        self.returncode = returncode
+        self._finished.set()
+
+    def terminate(self) -> None:
+        return None
+
+    def kill(self) -> None:
+        return None
+
+    async def wait(self) -> int:
+        await self._finished.wait()
+        assert self.returncode is not None
+        return self.returncode
+
+
+def _controlled_fuzzer(name: str, process: _ControlledProcess) -> FuzzerProcess:
+    return FuzzerProcess(name, process, Path(f"{name}.log"), MagicMock())
+
+
+def test_wait_for_completion_returns_when_all_fuzzers_exit_cleanly() -> None:
+    first, second = _ControlledProcess(), _ControlledProcess()
+
+    async def run() -> None:
+        group = FuzzerGroup((_controlled_fuzzer("a", first), _controlled_fuzzer("b", second)))
+        waiting = asyncio.ensure_future(group.wait_for_completion())
+        await asyncio.sleep(0.01)
+        first.finish(0)
+        await asyncio.sleep(0.01)
+        assert not waiting.done()
+        second.finish(0)
+        await asyncio.wait_for(waiting, timeout=1)
+
+    asyncio.run(run())
+
+
+def test_wait_for_completion_fails_on_nonzero_exit_while_others_run() -> None:
+    clean, failing, running = _ControlledProcess(), _ControlledProcess(), _ControlledProcess()
+    clean.finish(0)
+    failing.finish(3)
+
+    async def run() -> None:
+        group = FuzzerGroup(
+            (
+                _controlled_fuzzer("clean", clean),
+                _controlled_fuzzer("failing", failing),
+                _controlled_fuzzer("running", running),
+            )
+        )
+        await group.wait_for_completion()
+
+    with pytest.raises(RuntimeError) as error:
+        asyncio.run(run())
+
+    assert "fuzzer failing exited with code 3" in str(error.value)
+    assert "clean" not in str(error.value)
+
+
+def test_wait_for_completion_times_out_after_fuzzing_seconds() -> None:
+    process = _ControlledProcess()
+
+    async def run() -> None:
+        group = FuzzerGroup((_controlled_fuzzer("a", process),))
+        await group.wait_for_completion(0.05)
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(run())
+
+
+def test_wait_for_completion_does_not_count_sleeping_time() -> None:
+    process = _ControlledProcess()
+
+    async def run() -> float:
+        group = FuzzerGroup((_controlled_fuzzer("a", process),), dry_run=False)
+        waiting = asyncio.ensure_future(group.wait_for_completion(0.3))
+        await asyncio.sleep(0.1)
+        group.toggle_sleep()
+        await asyncio.sleep(0.5)
+        assert not waiting.done()
+        resumed = time.monotonic()
+        group.toggle_sleep()
+        with pytest.raises(TimeoutError):
+            await waiting
+        return time.monotonic() - resumed
+
+    awake_after_resume = asyncio.run(run())
+
+    assert 0.1 <= awake_after_resume < 0.35
+
+
+def test_wait_for_completion_reports_fuzzer_that_dies_while_sleeping() -> None:
+    process = _ControlledProcess()
+
+    async def run() -> None:
+        group = FuzzerGroup((_controlled_fuzzer("a", process),))
+        waiting = asyncio.ensure_future(group.wait_for_completion(10))
+        await asyncio.sleep(0.01)
+        group.toggle_sleep()
+        await asyncio.sleep(0.01)
+        process.finish(-9)
+        await waiting
+
+    with pytest.raises(RuntimeError, match="fuzzer a exited with code -9"):
+        asyncio.run(run())
+
+
+def test_wait_for_completion_without_timeout_is_not_bounded_by_sleep_toggles() -> None:
+    process = _ControlledProcess()
+
+    async def run() -> None:
+        group = FuzzerGroup((_controlled_fuzzer("a", process),))
+        waiting = asyncio.ensure_future(group.wait_for_completion())
+        await asyncio.sleep(0.01)
+        group.toggle_sleep()
+        group.toggle_sleep()
+        process.finish(0)
+        await asyncio.wait_for(waiting, timeout=1)
+
+    asyncio.run(run())

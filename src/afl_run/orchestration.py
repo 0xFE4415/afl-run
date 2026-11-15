@@ -16,7 +16,7 @@ from afl_run.engine import (
     build_common_no_cmplog_args,
     build_instance_flags,
 )
-from afl_run.launcher import ProcessLike
+from afl_run.launcher import ProcessLike, format_log_tail
 from afl_run.paths import ResolvedPaths
 
 MAIN_NAME = "main"
@@ -164,10 +164,12 @@ def reset_output_directory(root: Path) -> None:
     root.mkdir(parents=True)
 
 
-def wait_for_main(
+def wait_for_stats(
     stats_path: Path,
     main: ProcessLike,
     since: float,
+    log_path: Path | None = None,
+    log_start_offset: int = 0,
 ) -> None:
     stats_path.parent.mkdir(parents=True, exist_ok=True)
     since -= STATS_MTIME_SKEW_SECONDS
@@ -188,9 +190,16 @@ def wait_for_main(
         except ProcessLookupError:
             if _stats_written_since(stats_path, since):
                 return
-            raise RuntimeError(f"main exited before creating {stats_path}") from None
+            raise _startup_error(stats_path, log_path, log_start_offset) from None
         stack.callback(os.close, pidfd)
-        _wait_for_events(stats_path, notifier, pidfd, since)
+        _wait_for_events(stats_path, notifier, pidfd, since, log_path, log_start_offset)
+
+
+def _startup_error(stats_path: Path, log_path: Path | None, log_start_offset: int) -> RuntimeError:
+    message = f"fuzzer exited before creating {stats_path}"
+    if log_path is not None:
+        message += f"; see log {log_path}{format_log_tail(log_path, log_start_offset)}"
+    return RuntimeError(message)
 
 
 def _stats_written_since(stats_path: Path, since: float) -> bool:
@@ -207,6 +216,8 @@ def _wait_for_events(
     notifier: INotify,
     pidfd: int,
     since: float,
+    log_path: Path | None,
+    log_start_offset: int,
 ) -> None:
     with selectors.DefaultSelector() as selector:
         selector.register(notifier.fileno(), selectors.EVENT_READ, "filesystem")
@@ -216,7 +227,7 @@ def _wait_for_events(
                 if key.data == "process":
                     if _stats_written_since(stats_path, since):
                         return
-                    raise RuntimeError(f"main exited before creating {stats_path}")
+                    raise _startup_error(stats_path, log_path, log_start_offset)
                 notifier.read()
                 if _stats_written_since(stats_path, since):
                     return

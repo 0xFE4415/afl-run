@@ -106,8 +106,8 @@ def test_asan_args_use_scaled_timeout_with_memory_limit() -> None:
 
 @given(
     max_input_length=st.integers(min_value=0, max_value=1_000_000),
-    memory=st.integers(min_value=0, max_value=1_000_000),
-    timeout=st.integers(min_value=0, max_value=1_000_000),
+    memory=st.integers(min_value=5, max_value=1_000_000) | st.just(0),
+    timeout=st.integers(min_value=5, max_value=1_000_000),
     skip_deterministic=st.booleans(),
 )
 def test_common_args_reflect_engine_settings(
@@ -138,7 +138,7 @@ def test_common_args_reflect_engine_settings(
 
 
 @given(
-    memory=st.none() | st.integers(min_value=0, max_value=1_000_000),
+    memory=st.none() | st.integers(min_value=5, max_value=1_000_000) | st.just(0),
     dictionary=st.none() | st.just(Path("dict")),
     skip_deterministic=st.booleans(),
     additional_flags=st.lists(st.from_regex(r"--?[a-z]{1,6}", fullmatch=True), max_size=3).map(
@@ -177,8 +177,8 @@ def test_common_args_preserve_optional_settings(
 
 
 @given(
-    timeout=st.integers(min_value=0, max_value=1_000_000),
-    scale=st.floats(min_value=0, max_value=100),
+    timeout=st.integers(min_value=5, max_value=1_000_000),
+    scale=st.floats(min_value=1, max_value=100),
 )
 def test_asan_args_scale_timeout(timeout: int, scale: float) -> None:
     config = EngineConfig(timeout_ms=timeout, asan_timeout_scale=scale)
@@ -190,9 +190,9 @@ def test_asan_args_scale_timeout(timeout: int, scale: float) -> None:
 
 
 @given(
-    timeout=st.integers(min_value=0, max_value=1_000_000),
-    scale=st.floats(min_value=0, max_value=100),
-    memory=st.none() | st.integers(min_value=0, max_value=1_000_000),
+    timeout=st.integers(min_value=5, max_value=1_000_000),
+    scale=st.floats(min_value=1, max_value=100),
+    memory=st.none() | st.integers(min_value=5, max_value=1_000_000) | st.just(0),
 )
 def test_asan_args_scale_timeout_property(timeout: int, scale: float, memory: int | None) -> None:
     config = EngineConfig(

@@ -52,7 +52,8 @@ afl-run config.json
 ```
 
 The campaign can be bounded from the command line with a floating-point
-timeout in seconds:
+number of seconds of fuzzing. Startup, calibration and time spent asleep
+(`Ctrl-Z`) do not count:
 
 ```sh
 afl-run --timeout 3600.5 config.json
@@ -147,17 +148,25 @@ passwordless sudo is required; the runner uses `sudo -n` and aborts before
 writing anything when it is unavailable. If both values are already correct,
 sudo is not invoked.
 
-These settings affect the whole system and are not restored when the campaign
-ends. Consider using AFL++'s supported `afl-system-config` tool to manage the
-host configuration instead.
+The runner restores the previous values when the campaign ends, including
+after an error or `Ctrl-C`. It cannot restore them if it is killed with
+`SIGKILL` or the machine loses power. Consider using AFL++'s supported
+`afl-system-config` tool to manage the host configuration instead.
 
-When `--fresh` is not supplied, existing per-fuzzer logs are appended to so
-that resumed campaigns retain earlier output. Fresh campaigns truncate logs.
+When `--fresh` is not supplied, the runner sets `AFL_AUTORESUME=1` (unless the
+configuration sets it) so AFL++ resumes the existing output instead of deleting
+it, and existing per-fuzzer logs are appended to so that resumed campaigns
+retain earlier output. Fresh campaigns truncate logs.
 On resume, a leftover main `fuzzer_stats` file from the previous run is
 ignored: readiness requires the file to be rewritten after launch. While
 waiting, the runner monitors the main instance and reports slow startup
 (CPU time, RSS, log size) every 5 minutes; it aborts if the instance makes
 no progress for 5 minutes (for example, wedged on a kernel resource).
+
+The campaign ends with exit status 0 once every fuzzer has exited with code 0
+(for example, after `-V` in `additional_flags`). It stops with an error as soon
+as any fuzzer exits with a non-zero code. The runner waits for every instance to
+write `fuzzer_stats` before the `--timeout` clock starts.
 
 While a campaign is running, press `Ctrl-C` to stop it gracefully. The runner
 prints an `afl-whatsup` monitoring command and `pkill afl-fuzz` as an emergency
