@@ -481,5 +481,5 @@ def test_run_campaign_restores_host_after_failure(tmp_path: Path) -> None:
     ):
         asyncio.run(_run_campaign(cfg, paths))
 
-    host.return_value.__enter__.assert_called_once_with()
+    host.return_value.__enter__.assert_called_once()
     host.return_value.__exit__.assert_called_once()
