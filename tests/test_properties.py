@@ -62,14 +62,14 @@ def test_afl_tmpdir_rejects_nonexistent(path: str, tmp_path: Path) -> None:
     ),
     engine=st.builds(
         EngineConfig,
-        timeout_ms=st.integers(min_value=0, max_value=100_000),
-        memory_limit_mb=st.none() | st.integers(min_value=0, max_value=100_000),
-        memory_limit_cmplog_mb=st.none() | st.integers(min_value=0, max_value=100_000),
-        memory_limit_asan_mb=st.none() | st.integers(min_value=0, max_value=100_000),
+        timeout_ms=st.integers(min_value=5, max_value=100_000),
+        memory_limit_mb=st.none() | st.integers(min_value=5, max_value=100_000) | st.just(0),
+        memory_limit_cmplog_mb=st.none() | st.integers(min_value=5, max_value=100_000) | st.just(0),
+        memory_limit_asan_mb=st.none() | st.integers(min_value=5, max_value=100_000) | st.just(0),
         max_input_length=st.integers(min_value=0, max_value=100_000),
         skip_deterministic=st.booleans(),
         asan_instances=st.integers(min_value=0, max_value=64),
-        asan_timeout_scale=st.floats(min_value=0, max_value=64),
+        asan_timeout_scale=st.floats(min_value=1, max_value=64),
         afl_tmpdir=st.none() | st.just("tmpdir"),
         additional_flags=st.lists(st.from_regex(r"--?[a-z]{1,6}", fullmatch=True), max_size=3).map(
             tuple

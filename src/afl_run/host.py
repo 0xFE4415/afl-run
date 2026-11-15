@@ -1,25 +1,45 @@
 from __future__ import annotations
 
+import logging
 import subprocess
+from collections.abc import Generator
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 from afl_run.config import HostConfig
 
+LOGGER = logging.getLogger(__name__)
 RANDOMIZE_VA_SPACE = Path("/proc/sys/kernel/randomize_va_space")
 CORE_PATTERN = Path("/proc/sys/kernel/core_pattern")
 
 
-def configure_host(config: HostConfig) -> None:
+@contextmanager
+def configured_host(config: HostConfig) -> Generator[None]:
     settings = (
         (RANDOMIZE_VA_SPACE, config.randomize_va_space),
         (CORE_PATTERN, config.core_pattern),
     )
-    changes = tuple((path, value) for path, value in settings if path.read_text().strip() != value)
+    changes = []
+    for path, value in settings:
+        previous = path.read_text().strip()
+        if previous != value:
+            changes.append((path, previous, value))
     if not changes:
+        yield
         return
     _check_passwordless_sudo()
-    for path, value in changes:
-        _write_sysctl(path, value)
+    with ExitStack() as restores:
+        for path, previous, value in changes:
+            _write_sysctl(path, value)
+            restores.callback(_restore_sysctl, path, previous)
+        yield
+
+
+def _restore_sysctl(path: Path, previous: str) -> None:
+    try:
+        _write_sysctl(path, previous)
+    except RuntimeError as error:
+        LOGGER.error("could not restore %s to %r: %s", path, previous, error)
 
 
 def _check_passwordless_sudo() -> None:

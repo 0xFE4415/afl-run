@@ -42,8 +42,20 @@ def _reject_blank_flags(items: tuple[str, ...], label: str) -> tuple[str, ...]:
     return items
 
 
+MIN_TIMEOUT_MS = 5
+MIN_NONZERO_MEMORY_LIMIT_MB = 5
+
+
+def _reject_dangerously_low_memory_limit(value: int | None) -> int | None:
+    if value is not None and 0 < value < MIN_NONZERO_MEMORY_LIMIT_MB:
+        raise ValueError(
+            f"memory limit must be 0 (no limit) or at least {MIN_NONZERO_MEMORY_LIMIT_MB} MB"
+        )
+    return value
+
+
 class EngineConfig(StrictModel):
-    timeout_ms: int = Field(default=2500, ge=0)
+    timeout_ms: int = Field(default=2500, ge=MIN_TIMEOUT_MS)
     memory_limit_mb: int | None = Field(default=None, ge=0)
     memory_limit_cmplog_mb: int | None = Field(default=None, ge=0)
     memory_limit_asan_mb: int | None = Field(default=None, ge=0)
@@ -54,6 +66,11 @@ class EngineConfig(StrictModel):
     afl_tmpdir: str | None = Field(default=None, min_length=1)
     additional_flags: tuple[str, ...] = ()
     flags: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+
+    @field_validator("memory_limit_mb", "memory_limit_cmplog_mb", "memory_limit_asan_mb")
+    @classmethod
+    def reject_low_memory_limit(cls, value: int | None) -> int | None:
+        return _reject_dangerously_low_memory_limit(value)
 
     @field_validator("additional_flags")
     @classmethod
@@ -88,7 +105,7 @@ class HostConfig(StrictModel):
 
 class Config(StrictModel):
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
-    paths: PathConfig = Field(default_factory=PathConfig)
+    paths: PathConfig
     engine: EngineConfig = Field(default_factory=EngineConfig)
     env: EnvConfig = Field(default_factory=EnvConfig)
     host: HostConfig = Field(default_factory=HostConfig)
@@ -111,6 +128,18 @@ class Config(StrictModel):
                 raise ValueError(
                     f"out_dir {self.paths.out_dir!r} must not equal or contain {name} {value!r}"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def reject_low_asan_timeout(self) -> Self:
+        if self.paths.asan is None:
+            return self
+        asan_timeout_ms = round(self.engine.timeout_ms * self.engine.asan_timeout_scale)
+        if asan_timeout_ms < MIN_TIMEOUT_MS:
+            raise ValueError(
+                f"timeout_ms * asan_timeout_scale must be at least {MIN_TIMEOUT_MS} ms,"
+                f" got {asan_timeout_ms}"
+            )
         return self
 
     @model_validator(mode="after")
