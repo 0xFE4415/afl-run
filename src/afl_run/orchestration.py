@@ -190,16 +190,38 @@ def wait_for_stats(
         except ProcessLookupError:
             if _stats_written_since(stats_path, since):
                 return
-            raise _startup_error(stats_path, log_path, log_start_offset) from None
+            raise _startup_error(stats_path, main.pid, log_path, log_start_offset) from None
         stack.callback(os.close, pidfd)
-        _wait_for_events(stats_path, notifier, pidfd, since, log_path, log_start_offset)
+        _wait_for_events(stats_path, notifier, pidfd, main.pid, since, log_path, log_start_offset)
 
 
-def _startup_error(stats_path: Path, log_path: Path | None, log_start_offset: int) -> RuntimeError:
-    message = f"fuzzer exited before creating {stats_path}"
+def _startup_error(
+    stats_path: Path,
+    pid: int,
+    log_path: Path | None,
+    log_start_offset: int,
+) -> RuntimeError:
+    message = f"fuzzer {_describe_exit(pid)} before creating {stats_path}"
     if log_path is not None:
         message += f"; see log {log_path}{format_log_tail(log_path, log_start_offset)}"
     return RuntimeError(message)
+
+
+def _describe_exit(pid: int) -> str:
+    # Peek at the exit status without reaping the child (WNOWAIT), so the
+    # event loop's own wait() still sees it. If the child is already reaped
+    # the generic wording still holds.
+    try:
+        info = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOWAIT | os.WNOHANG)
+    except OSError:
+        info = None
+    if info is None:
+        return "exited"
+    if info.si_code == os.CLD_EXITED:
+        return f"exited with code {info.si_status}"
+    if info.si_code == os.CLD_DUMPED:
+        return f"was killed by signal {info.si_status} (core dumped)"
+    return f"was killed by signal {info.si_status}"
 
 
 def _stats_written_since(stats_path: Path, since: float) -> bool:
@@ -215,6 +237,7 @@ def _wait_for_events(
     stats_path: Path,
     notifier: INotify,
     pidfd: int,
+    pid: int,
     since: float,
     log_path: Path | None,
     log_start_offset: int,
@@ -227,7 +250,7 @@ def _wait_for_events(
                 if key.data == "process":
                     if _stats_written_since(stats_path, since):
                         return
-                    raise _startup_error(stats_path, log_path, log_start_offset)
+                    raise _startup_error(stats_path, pid, log_path, log_start_offset)
                 notifier.read()
                 if _stats_written_since(stats_path, since):
                     return

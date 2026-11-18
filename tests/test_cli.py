@@ -443,6 +443,38 @@ def test_run_campaign_keeps_user_autoresume_value(tmp_path: Path) -> None:
     assert environment["AFL_AUTORESUME"] == "0"
 
 
+def test_run_campaign_dry_run_hints_at_autoresume(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    cfg, paths = _config(tmp_path)
+
+    with patch("afl_run.cli.build_environment", return_value={}):
+        asyncio.run(_run_campaign(cfg, paths, dry_run=True))
+
+    assert "would set AFL_AUTORESUME=1" in caplog.text
+
+
+def test_run_campaign_dry_run_fresh_does_not_hint_at_autoresume(tmp_path: Path, caplog) -> None:
+    caplog.set_level(logging.INFO)
+    cfg, paths = _config(tmp_path)
+
+    with patch("afl_run.cli.build_environment", return_value={}):
+        asyncio.run(_run_campaign(cfg, paths, fresh=True, dry_run=True))
+
+    assert "AFL_AUTORESUME" not in caplog.text
+
+
+def test_run_campaign_dry_run_does_not_hint_when_user_configures_autoresume(
+    tmp_path: Path, caplog
+) -> None:
+    caplog.set_level(logging.INFO)
+    cfg, paths = _config(tmp_path)
+
+    with patch("afl_run.cli.build_environment", return_value={"AFL_AUTORESUME": "0"}):
+        asyncio.run(_run_campaign(cfg, paths, dry_run=True))
+
+    assert "would set AFL_AUTORESUME=1" not in caplog.text
+
+
 def test_run_campaign_waits_for_every_instance_stats_before_timing(tmp_path: Path) -> None:
     cfg, paths = _config(tmp_path, n_workers=2)
     launched, launch = _make_launch_recorder()

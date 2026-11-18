@@ -130,8 +130,10 @@ async def _run_fuzzers(
 ) -> None:
     loop = asyncio.get_running_loop()
     environment = build_environment(config)
-    if not fresh:
-        environment.setdefault("AFL_AUTORESUME", "1")
+    if not fresh and "AFL_AUTORESUME" not in environment:
+        environment["AFL_AUTORESUME"] = "1"
+        if dry_run:
+            LOGGER.info("would set AFL_AUTORESUME=1 to resume a prior campaign")
     append_logs = not fresh
     async with FuzzerGroup(dry_run=dry_run) as group:
         if not no_sleep:
