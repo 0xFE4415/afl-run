@@ -315,7 +315,8 @@ class _Notifier:
 
 
 class _Process:
-    pid = 123
+    def __init__(self, pid: int = 123) -> None:
+        self.pid = pid
 
 
 def test_wait_for_stats_waits_until_stats_exists(tmp_path: Path) -> None:
@@ -533,3 +534,41 @@ def test_wait_for_stats_error_tails_only_output_after_start_offset(tmp_path: Pat
 
     assert "this run" in str(error.value)
     assert "previous run" not in str(error.value)
+
+
+@pytest.mark.parametrize(
+    ("child_code", "expected"),
+    [
+        ("import sys; sys.exit(3)", "fuzzer exited with code 3"),
+        (
+            "import os, signal; os.kill(os.getpid(), signal.SIGKILL)",
+            "fuzzer was killed by signal 9",
+        ),
+        (
+            "import os, signal; os.kill(os.getpid(), signal.SIGSEGV)",
+            "fuzzer was killed by signal 11 (core dumped)",
+        ),
+    ],
+)
+def test_wait_for_stats_error_names_how_fuzzer_exited(
+    tmp_path: Path, child_code: str, expected: str
+) -> None:
+    stats = tmp_path / "fuzzer_stats"
+    child = subprocess.Popen([sys.executable, "-c", child_code])
+    # Wait for the child to exit without reaping it, so _describe_exit can
+    # still peek at its status.
+    os.waitid(os.P_PID, child.pid, os.WEXITED | os.WNOWAIT)
+
+    with (
+        patch("afl_run.orchestration.INotify"),
+        patch(
+            "afl_run.orchestration.selectors.DefaultSelector", return_value=_Selector(["process"])
+        ),
+        patch("afl_run.orchestration.os.pidfd_open", return_value=42),
+        patch("afl_run.orchestration.os.close"),
+        pytest.raises(RuntimeError) as error,
+    ):
+        wait_for_stats(stats, _Process(child.pid), time.time())
+
+    child.wait()
+    assert expected in str(error.value)
